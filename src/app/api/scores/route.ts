@@ -1,38 +1,86 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { requireActiveSubscription } from '@/lib/subscription';
+import { getUserScores, createScore, ScoreServiceError } from '@/lib/scores/service';
+import { createScoreSchema } from '@/lib/validations/scores';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Temporary Stub: GET /api/scores
- * NOTE: Phase 3 will replace this with full 5-score submission & retrieval.
- * Used in Phase 2 to verify server-side 403 access control for non-subscribers.
+ * GET /api/scores
+ * Returns the current authenticated user's scores, sorted newest played_on first.
+ * Readable by any logged-in member (including non-subscribers in read-only mode).
  */
 export async function GET() {
-  const check = await requireActiveSubscription({ isApi: true });
-  if (check instanceof NextResponse) {
-    return check;
-  }
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-  return NextResponse.json({
-    message: 'Active subscription verified. Score system ready for Phase 3.',
-    userId: check.user.id,
-    plan: check.subscription.plan,
-  });
+    if (error || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: You must be logged in to view scores.' },
+        { status: 401 }
+      );
+    }
+
+    const scores = await getUserScores(supabase, user.id);
+    return NextResponse.json({ scores });
+  } catch (err: any) {
+    console.error('Error fetching scores:', err);
+    return NextResponse.json(
+      { error: err?.message || 'Failed to retrieve scores.' },
+      { status: 500 }
+    );
+  }
 }
 
 /**
- * Temporary Stub: POST /api/scores
- * Enforces active subscription check on score submission attempts.
+ * POST /api/scores
+ * Creates a new Stableford score (1-45, one per date).
+ * Strictly requires an active subscription or admin bypass.
  */
-export async function POST() {
-  const check = await requireActiveSubscription({ isApi: true });
-  if (check instanceof NextResponse) {
-    return check;
-  }
+export async function POST(req: Request) {
+  try {
+    // 1. Enforce active subscription on write actions
+    const check = await requireActiveSubscription({ isApi: true });
+    if (check instanceof NextResponse) {
+      return check;
+    }
 
-  return NextResponse.json({
-    message: 'Active subscription verified. Score submission will be implemented in Phase 3.',
-  });
+    const supabase = await createClient();
+    const body = await req.json();
+
+    // 2. Validate payload with Zod
+    const validation = createScoreSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.issues[0]?.message || 'Invalid score data.' },
+        { status: 400 }
+      );
+    }
+
+    // 3. Create score (business rules + database trigger prune)
+    const newScore = await createScore(supabase, check.user.id, validation.data);
+
+    return NextResponse.json(
+      {
+        score: newScore,
+        message: 'Score recorded successfully.',
+      },
+      { status: 201 }
+    );
+  } catch (err: any) {
+    if (err instanceof ScoreServiceError) {
+      return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    }
+    console.error('Error creating score:', err);
+    return NextResponse.json(
+      { error: err?.message || 'Failed to create score.' },
+      { status: 500 }
+    );
+  }
 }

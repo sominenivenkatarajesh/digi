@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { ScoresCard } from '@/components/dashboard/ScoresCard';
 import { createClient } from '@/lib/supabase/client';
 import {
   Sparkles,
@@ -479,45 +480,11 @@ function DashboardContent() {
           </GlassCard>
         </div>
 
-        {/* Your Scores: Coming Soon (Protected for active subscribers) */}
-        <GlassCard glowColor="emerald" className="p-8 sm:p-10 mb-10 border-emerald-500/20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-white/[0.08]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                <Ticket className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-display font-bold text-white">
-                    Your Stableford Scores
-                  </h2>
-                  <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-gold-400/10 text-gold-400 border border-gold-400/25">
-                    Phase 3
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Scores matched directly against the monthly 5-number draw
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-navy-950/60 border border-white/5 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="max-w-xl">
-              <h3 className="text-sm font-semibold text-white mb-1">
-                Your scores: coming in Phase 3
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Active subscribers will enter their last 5 Stableford scores (1–45, one per date). When the monthly draw occurs, 5 winning numbers are drawn and matched against your stored scores for 5, 4, or 3-number prize splits. Non-subscribers are blocked server-side.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-mono text-emerald-400 font-semibold px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                Server Guarded
-              </span>
-            </div>
-          </div>
-        </GlassCard>
+        {/* Stableford Scores Card */}
+        <ScoresCard
+          isActiveSubscription={subscription?.isActive || false}
+          isAdmin={subscription?.isAdmin || false}
+        />
       </Container>
     </main>
   );
