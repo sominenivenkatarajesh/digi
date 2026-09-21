@@ -6,6 +6,7 @@ import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { Menu, X, Shield, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -71,6 +72,7 @@ export function Navbar() {
 
         {/* Desktop CTA actions */}
         <div className="hidden md:flex items-center gap-3">
+          <CurrencySelector size="sm" />
           <Button
             href="/login"
             variant="ghost"

@@ -9,11 +9,13 @@ import { Reveal } from '@/components/ui/Reveal';
 import { Check, Sparkles, Shield, Heart } from 'lucide-react';
 import { getPlatformSettings, type PlatformPricing } from '@/lib/data/homepage';
 import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/components/providers/CurrencyProvider';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 export function PricingSection() {
   const router = useRouter();
+  const { format: formatPrice } = useCurrency();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
@@ -156,7 +158,7 @@ export function PricingSection() {
 
                 <div className="flex items-baseline gap-1 mb-8">
                   <span className="font-display text-4xl sm:text-5xl font-extrabold text-white">
-                    {formatCurrency(pricing.monthlyPrice, pricing.currency)}
+                    {formatPrice(pricing.monthlyPrice)}
                   </span>
                   <span className="text-slate-400 text-sm font-medium">/ month</span>
                 </div>
@@ -212,12 +214,12 @@ export function PricingSection() {
 
                 <div className="flex items-baseline gap-1 mb-2">
                   <span className="font-display text-4xl sm:text-5xl font-extrabold text-white">
-                    {formatCurrency(pricing.yearlyPrice, pricing.currency)}
+                    {formatPrice(pricing.yearlyPrice)}
                   </span>
                   <span className="text-slate-400 text-sm font-medium">/ year</span>
                 </div>
                 <div className="text-[11px] text-emerald-400 font-semibold mb-8">
-                  Equivalent to {formatCurrency(Math.round(pricing.yearlyPrice / 12), pricing.currency)}/month (2 months free)
+                  Equivalent to {formatPrice(Math.round(pricing.yearlyPrice / 12))}/month (2 months free)
                 </div>
 
                 <ul className="space-y-3.5 mb-8">

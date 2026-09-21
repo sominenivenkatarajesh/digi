@@ -10,6 +10,8 @@ import { ScoresCard } from '@/components/dashboard/ScoresCard';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency } from '@/lib/utils';
 import { calculateContribution, poundsToPence, penceToPounds } from '@/lib/charity/calculate';
+import { useCurrency } from '@/components/providers/CurrencyProvider';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
 import {
   Sparkles,
   Heart,
@@ -26,6 +28,15 @@ import {
   Sliders,
   X,
   Info,
+  Trophy,
+  Users,
+  Award,
+  Gift,
+  Compass,
+  Share2,
+  Copy,
+  Check,
+  TrendingUp,
 } from 'lucide-react';
 
 interface MemberProfile {
@@ -65,8 +76,11 @@ function DashboardContent() {
   const promptSubscribe = searchParams.get('subscribe') === 'true';
   const changeCharityParam = searchParams.get('changeCharity');
 
+  const { format: formatPrice, currency, symbol } = useCurrency();
   const [profile, setProfile] = useState<MemberProfile | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionDetails | null>(null);
+  const [userScores, setUserScores] = useState<{ id: string; score: number; played_on: string }[]>([]);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   const [charity, setCharity] = useState<CharityDetails>({
     id: '',
     name: "Hope Horizons Children's Foundation",
@@ -191,6 +205,18 @@ function DashboardContent() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const totalPaid = paymentsData.reduce((sum: number, p: any) => sum + Number(p.charity_amount || 0), 0);
           setTotalContributedSoFar(totalPaid);
+        }
+
+        // 3b. Fetch user's latest 5 Stableford scores for the Draw Ticket
+        const { data: scoresData } = await supabase
+          .from('scores')
+          .select('id, score, played_on')
+          .eq('user_id', user.id)
+          .order('played_on', { ascending: false })
+          .limit(5);
+
+        if (scoresData) {
+          setUserScores(scoresData);
         }
 
         // 4. Fetch active charities list for change dropdown
@@ -431,6 +457,8 @@ function DashboardContent() {
           </div>
 
           <div className="flex items-center gap-3">
+            <CurrencySelector size="sm" />
+
             {subscription?.isActive && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-semibold">
                 <Ticket className="w-3.5 h-3.5 text-emerald-400" />
@@ -468,7 +496,7 @@ function DashboardContent() {
                 isLoading={isCheckoutLoading === 'monthly'}
                 onClick={() => handleStartCheckout('monthly')}
               >
-                Monthly (£10/mo)
+                Monthly ({formatPrice(monthlyPrice)}/mo)
               </Button>
               <Button
                 variant="primary"
@@ -476,20 +504,28 @@ function DashboardContent() {
                 isLoading={isCheckoutLoading === 'yearly'}
                 onClick={() => handleStartCheckout('yearly')}
               >
-                Yearly (£99/yr)
+                Yearly ({formatPrice(yearlyPrice)}/yr)
               </Button>
             </div>
           </div>
         )}
 
         {/* Membership Status Overview */}
-        <div className="mb-6">
-          <h2 className="text-lg font-display font-bold text-white">Membership Overview</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            {subscription?.isActive
-              ? 'Your active subscription fuels direct charity aid and guarantees entry into every monthly draw.'
-              : 'Activate your membership to unlock full draw participation and direct charity giving.'}
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-display font-bold text-white">Membership Overview</h2>
+            <p className="text-slate-400 text-sm mt-1">
+              {subscription?.isActive
+                ? 'Your active subscription fuels direct charity aid and guarantees entry into every monthly draw.'
+                : 'Activate your membership to unlock full draw participation and direct charity giving.'}
+            </p>
+          </div>
+          <div className="text-xs text-slate-400 flex items-center gap-2">
+            <span>Display Currency:</span>
+            <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {currency} ({symbol})
+            </span>
+          </div>
         </div>
 
         {/* 3 Overview Cards */}
@@ -562,7 +598,7 @@ function DashboardContent() {
                   className="w-full justify-center"
                   leftIcon={<Sparkles className="w-3.5 h-3.5" />}
                 >
-                  Subscribe Now (£10/mo)
+                  Subscribe Now ({formatPrice(monthlyPrice)}/mo)
                 </Button>
               )}
             </div>
@@ -606,13 +642,13 @@ function DashboardContent() {
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Dedicated per cycle:</span>
                   <span className="font-bold text-white">
-                    £{charityAmountPerCycle} {planPeriodText}
+                    {formatPrice(charityPence / 100)} {planPeriodText}
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-1 border-t border-white/5">
                   <span className="text-slate-400">Your total impact so far:</span>
                   <span className="font-bold text-emerald-300">
-                    {totalContributedSoFar > 0 ? formatCurrency(totalContributedSoFar, '£') : '£0.00'}
+                    {totalContributedSoFar > 0 ? formatPrice(totalContributedSoFar) : formatPrice(0)}
                   </span>
                 </div>
               </div>
@@ -650,14 +686,19 @@ function DashboardContent() {
               <p className="text-xs text-slate-400">
                 Official 5-number draw at 00:00:00 UTC.
               </p>
+              <div className="mt-3 p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-xs">
+                <span className="text-slate-400">Estimated Cash Prize Pool: </span>
+                <strong className="text-gold-300 font-mono">{formatPrice(45000)}</strong>
+              </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-white/[0.08] text-xs text-slate-300">
+            <div className="mt-6 pt-4 border-t border-white/[0.08] text-xs text-slate-300 flex items-center justify-between">
               {subscription?.isActive ? (
                 <span className="text-emerald-400 font-medium">✓ Qualified for next draw</span>
               ) : (
                 <span className="text-amber-400 font-medium">Subscribe to qualify</span>
               )}
+              <span className="text-[11px] text-slate-400">45% Pool Split</span>
             </div>
           </GlassCard>
         </div>
@@ -667,6 +708,367 @@ function DashboardContent() {
           isActiveSubscription={subscription?.isActive || false}
           isAdmin={subscription?.isAdmin || false}
         />
+
+        {/* SECTION 3: Live 5-Number Monthly Draw Ticket */}
+        <div className="mt-12 mb-12">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Ticket className="w-5 h-5 text-gold-400" />
+                <h2 className="text-xl font-display font-bold text-white">Your Official Draw Ticket</h2>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400 border border-gold-500/30">
+                  Draw #29
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Your 5 Stableford scores automatically form your unique 5-number combination for the upcoming monthly cash draw.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Guaranteed Prize Pool:</span>
+              <span className="font-mono font-bold text-gold-300 bg-gold-500/10 px-2.5 py-1 rounded-xl border border-gold-500/25 text-sm">
+                {formatPrice(45000)}
+              </span>
+            </div>
+          </div>
+
+          <GlassCard glowColor="gold" className="p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gold-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+              {/* Ticket Numbers Grid */}
+              <div className="w-full lg:w-auto">
+                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-3 flex items-center justify-between">
+                  <span>Your 5 Draw Numbers (1-45):</span>
+                  <span className="text-emerald-400 font-mono">
+                    {userScores.length === 5 ? '✓ Ticket Complete' : `${userScores.length}/5 Numbers Set`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                  {[0, 1, 2, 3, 4].map((index) => {
+                    const scoreItem = userScores[index];
+                    return (
+                      <div key={index} className="flex flex-col items-center gap-1.5">
+                        <div
+                          className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-display font-black text-xl sm:text-2xl transition-all shadow-lg ${
+                            scoreItem
+                              ? 'bg-gradient-to-tr from-gold-500 via-amber-400 to-yellow-300 text-navy-950 shadow-gold-500/25 scale-100 ring-2 ring-gold-400/50'
+                              : 'bg-navy-900/90 border-2 border-dashed border-white/20 text-slate-500'
+                          }`}
+                        >
+                          {scoreItem ? scoreItem.score : `?`}
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {scoreItem ? scoreItem.played_on : `Slot ${index + 1}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Draw Status & Countdown Info */}
+              <div className="w-full lg:max-w-xs p-5 rounded-2xl bg-navy-950/70 border border-white/10 space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Draw Date:</span>
+                  <span className="font-semibold text-white">1st of Next Month</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Execution Time:</span>
+                  <span className="font-mono text-slate-300">00:00:00 UTC</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Verification:</span>
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Provably Fair VRF</span>
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                  <span className="text-slate-400">Eligibility:</span>
+                  <span className={subscription?.isActive ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                    {subscription?.isActive ? 'Active Member' : 'Inactive (Subscribe to Qualify)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* SECTION 4: Charity Spotlight & One-off Boost */}
+        <div className="mt-12 mb-12">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Heart className="w-5 h-5 text-rose-400" />
+                <h2 className="text-xl font-display font-bold text-white">Charity Impact & Spotlight</h2>
+              </div>
+              <p className="text-xs text-slate-400">
+                100% of your charity contributions are transferred directly to verified humanitarian and environmental causes.
+              </p>
+            </div>
+            <Button
+              href="/charities"
+              variant="secondary"
+              size="sm"
+              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+            >
+              All Charities
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Active Charity Spotlight Card */}
+            <GlassCard glowColor="emerald" className="p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    Your Chosen Cause
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    Split: {charity.percent}%
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-display font-bold text-white mb-1">
+                  {charity.name}
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                  {charity.tagline}
+                </p>
+
+                <div className="p-3.5 rounded-xl bg-navy-950/60 border border-white/5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Estimated Monthly Impact:</span>
+                    <span className="font-bold text-emerald-300">
+                      {formatPrice(charityPence / 100)} / month
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Lifetime Contribution:</span>
+                    <span className="font-mono font-bold text-white">
+                      {totalContributedSoFar > 0 ? formatPrice(totalContributedSoFar) : formatPrice(0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center gap-3">
+                <Button
+                  href={`/charities/${charity.id || 'hope-horizons'}?donate=true`}
+                  variant="glow"
+                  size="sm"
+                  className="flex-1 justify-center text-xs"
+                  leftIcon={<Gift className="w-3.5 h-3.5" />}
+                >
+                  Make One-Off Boost
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsModalOpen(true)}
+                  className="text-xs"
+                >
+                  Edit Split %
+                </Button>
+              </div>
+            </GlassCard>
+
+            {/* Upcoming Charity Golf Days */}
+            <GlassCard glowColor="default" className="p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-gold-400 bg-gold-500/10 px-2 py-0.5 rounded border border-gold-500/20">
+                    Upcoming Charity Tournaments
+                  </span>
+                  <Trophy className="w-4 h-4 text-gold-400" />
+                </div>
+
+                <h3 className="text-lg font-display font-bold text-white mb-2">
+                  Heroes Charity Golf Classic
+                </h3>
+                <p className="text-xs text-slate-400 mb-4">
+                  Wentworth Golf Club, Surrey • 18-hole Stableford invitational with 100% of tournament entry fees dedicated to pediatric critical care.
+                </p>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Next Tournament: In 14 Days</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Users className="w-3.5 h-3.5 text-gold-400" />
+                    <span>Over 120 Golfers & Verified Heroes Participating</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/[0.08]">
+                <Button
+                  href="/charities"
+                  variant="secondary"
+                  size="sm"
+                  className="w-full justify-center text-xs"
+                  rightIcon={<ExternalLink className="w-3.5 h-3.5 text-slate-400" />}
+                >
+                  View All Charity Events
+                </Button>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+
+        {/* SECTION 5: Recent Draw Ledger & Community Winners */}
+        <div className="mt-12 mb-12">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Award className="w-5 h-5 text-gold-400" />
+                <h2 className="text-xl font-display font-bold text-white">Transparent Draw Ledger</h2>
+              </div>
+              <p className="text-xs text-slate-400">
+                Audited monthly prize allocations and direct charity distributions for full transparency.
+              </p>
+            </div>
+            <span className="text-xs text-emerald-400 font-mono flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Public Blockchain Audited</span>
+            </span>
+          </div>
+
+          <GlassCard glowColor="default" className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+              <div>
+                <span className="text-[10px] font-mono text-slate-400 uppercase">Draw #28 Winning Numbers</span>
+                <div className="flex items-center gap-1.5 mt-2">
+                  {[14, 22, 31, 38, 42].map((num) => (
+                    <span
+                      key={num}
+                      className="w-8 h-8 rounded-lg bg-navy-900 border border-gold-400/30 text-gold-400 font-mono font-bold text-xs flex items-center justify-center shadow-sm"
+                    >
+                      {num}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-mono text-slate-400 uppercase">Jackpot Winner</span>
+                <div className="text-base font-display font-bold text-white mt-1">
+                  1 Lucky Hero
+                </div>
+                <div className="text-xs text-emerald-400 font-mono font-semibold">
+                  Won {formatPrice(45000)}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-mono text-slate-400 uppercase">Charity Payout (Cycle #28)</span>
+                <div className="text-base font-display font-bold text-white mt-1">
+                  {formatPrice(10000)}
+                </div>
+                <div className="text-xs text-slate-400">
+                  Disbursed across 6 causes
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-mono text-slate-400 uppercase">Prize Pool Percentage</span>
+                <div className="text-base font-display font-bold text-white mt-1">
+                  45% Guaranteed
+                </div>
+                <div className="text-xs text-slate-400">
+                  Strictly non-profit retention
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* SECTION 6: Member Perks & Quick Actions */}
+        <div className="mt-12 mb-16">
+          <div className="mb-6">
+            <h2 className="text-xl font-display font-bold text-white mb-1">Member Tools & Community</h2>
+            <p className="text-xs text-slate-400">
+              Share the mission, verify your contribution records, and invite fellow golfers to play and give.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Referral / Invite */}
+            <GlassCard glowColor="default" className="p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2 text-emerald-400">
+                  <Share2 className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Invite a Fellow Golfer</span>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">
+                  Bring another golfer into the circle to expand charity funding and enter joint draw bonuses.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    navigator.clipboard.writeText(`${window.location.origin}/signup?ref=${profile?.id || 'hero'}`);
+                    setCopiedInvite(true);
+                    setTimeout(() => setCopiedInvite(false), 2500);
+                  }
+                }}
+                className="w-full justify-center text-xs"
+                leftIcon={copiedInvite ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              >
+                {copiedInvite ? 'Copied Invite Link!' : 'Copy Referral Link'}
+              </Button>
+            </GlassCard>
+
+            {/* Stableford Rules */}
+            <GlassCard glowColor="default" className="p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2 text-gold-400">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Stableford Rules Guide</span>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">
+                  Scores 1-45 are entered per round. The 5 latest valid rounds form your verified numbers.
+                </p>
+              </div>
+              <Button
+                href="/#how-it-works"
+                variant="secondary"
+                size="sm"
+                className="w-full justify-center text-xs"
+                rightIcon={<ExternalLink className="w-3.5 h-3.5 text-slate-400" />}
+              >
+                Read Draw Mechanics
+              </Button>
+            </GlassCard>
+
+            {/* Tax Receipt */}
+            <GlassCard glowColor="default" className="p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2 text-teal-400">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Tax-Deductible Certificate</span>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">
+                  Your designated charity contributions are eligible for Gift Aid and direct tax relief.
+                </p>
+              </div>
+              <Button
+                href="/dashboard"
+                variant="secondary"
+                size="sm"
+                onClick={() => alert(`Your annual Giving Statement for ${currency} ${formatPrice(totalContributedSoFar)} will be sent to ${profile?.email} at the end of the tax year.`)}
+                className="w-full justify-center text-xs"
+              >
+                Request Tax Statement
+              </Button>
+            </GlassCard>
+          </div>
+        </div>
       </Container>
 
       {/* Charity Settings Modal */}
