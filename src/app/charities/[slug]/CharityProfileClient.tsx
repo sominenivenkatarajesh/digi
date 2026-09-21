@@ -14,11 +14,9 @@ import {
   ExternalLink,
   ArrowLeft,
   Sparkles,
-  ShieldCheck,
   CreditCard,
   AlertTriangle,
   Info,
-  CheckCircle2,
   Lock,
 } from 'lucide-react';
 
@@ -132,7 +130,6 @@ export function CharityProfileClient({
 
   const formatDate = (dateStr: string) => {
     try {
-      // Split YYYY-MM-DD or parse ISO safely
       const d = new Date(dateStr);
       return d.toLocaleDateString('en-GB', {
         weekday: 'short',
@@ -165,20 +162,6 @@ export function CharityProfileClient({
           </Link>
         </div>
 
-        {/* Deactivated Charity Notice */}
-        {!charity.is_active && (
-          <div className="mb-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-semibold text-amber-300">Charity Currently Inactive</h3>
-              <p className="text-xs text-slate-300 mt-1">
-                This charity is not currently accepting new member allocations or direct donations.
-                Existing supporters can update their charity preferences from their dashboard.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Hero Section */}
         <GlassCard
           glowColor={charity.is_featured ? 'gold' : 'emerald'}
@@ -187,7 +170,7 @@ export function CharityProfileClient({
           {charity.is_featured && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-400/15 border border-gold-400/30 text-gold-300 text-xs font-bold uppercase tracking-wider mb-4">
               <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-              <span>Official Featured Charity</span>
+              <span>Featured Cause</span>
             </div>
           )}
 
@@ -196,10 +179,6 @@ export function CharityProfileClient({
               <div className="flex flex-wrap items-center gap-3 mb-3">
                 <span className="text-xs uppercase font-mono font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                   {charity.category || 'Humanitarian Cause'}
-                </span>
-                <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  Verified UK Partner
                 </span>
               </div>
 
@@ -218,63 +197,51 @@ export function CharityProfileClient({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium mb-6"
                 >
-                  <span>Visit official website</span>
+                  <span>Visit website</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-white/10">
-                {charity.is_active ? (
-                  <>
-                    <Button
-                      href={isLoggedIn ? `/dashboard?changeCharity=${charity.id}` : `/signup?charity=${charity.id}`}
-                      variant="primary"
-                      size="lg"
-                      leftIcon={<Heart className="w-4 h-4 fill-white" />}
-                    >
-                      {isLoggedIn ? 'Select as Your Charity' : 'Support with Membership'}
-                    </Button>
+                <Button
+                  href={isLoggedIn ? `/dashboard?changeCharity=${charity.id}` : `/signup?charity=${charity.slug || charity.id}`}
+                  variant="primary"
+                  size="lg"
+                  leftIcon={<Heart className="w-4 h-4 fill-white" />}
+                >
+                  {isLoggedIn ? 'Support with Membership' : 'Support with Membership'}
+                </Button>
 
-                    <Button
-                      href="#donate-section"
-                      variant="glow"
-                      size="lg"
-                      leftIcon={<CreditCard className="w-4 h-4" />}
-                    >
-                      Make Direct Donation
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">
-                    Allocations and donations are paused while this charity is inactive.
-                  </p>
-                )}
+                <Button
+                  href="#donate-section"
+                  variant="glow"
+                  size="lg"
+                  leftIcon={<CreditCard className="w-4 h-4" />}
+                >
+                  Make Direct Donation
+                </Button>
               </div>
             </div>
 
-            {/* Total Raised & Impact Metric Card */}
+            {/* Total Raised Card */}
             <div className="lg:col-span-4 w-full">
               <div className="p-6 rounded-2xl bg-navy-950/70 border border-white/10 backdrop-blur-md">
                 <div className="text-xs text-slate-400 font-mono uppercase tracking-wider mb-1">
-                  Community Impact
+                  Total Raised
                 </div>
                 <div className="text-3xl sm:text-4xl font-display font-bold text-emerald-400 mb-2">
                   {totalRaised > 0 ? formatCurrency(totalRaised, '£') : '£0.00'}
                 </div>
-                <p className="text-xs text-slate-400 mb-6">
+                <p className="text-xs text-slate-400 mb-4">
                   {totalRaised > 0
-                    ? 'Raised directly by Digital Heroes golfers & independent supporters.'
-                    : 'Be the first hero to contribute directly or via your subscription!'}
+                    ? 'Raised directly through member contributions and independent donations.'
+                    : 'Be the first supporter to contribute!'}
                 </p>
 
                 {charity.impact_metric && (
                   <div className="pt-4 border-t border-white/10">
-                    <div className="text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-                      Direct Outcome
-                    </div>
-                    <p className="text-xs text-emerald-300 leading-relaxed">
+                    <p className="text-xs text-slate-300 leading-relaxed">
                       {charity.impact_metric}
                     </p>
                   </div>
@@ -305,10 +272,10 @@ export function CharityProfileClient({
                 <div>
                   <h2 className="text-xl font-display font-bold text-white flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-gold-400" />
-                    Upcoming Events & Golf Days
+                    Upcoming Events
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    Charity golf days, tournaments, and foundation gatherings.
+                    Charity golf days, tournaments, and fundraisers.
                   </p>
                 </div>
               </div>
@@ -318,7 +285,7 @@ export function CharityProfileClient({
                   <Calendar className="w-8 h-8 text-slate-500 mx-auto mb-2" />
                   <p className="text-sm text-slate-300 font-medium">No upcoming events scheduled</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Check back soon for charity golf tournaments, gala dinners, and community days.
+                    Check back soon for upcoming charity golf tournaments and community days.
                   </p>
                 </div>
               ) : (
@@ -369,14 +336,14 @@ export function CharityProfileClient({
                     Direct Donation
                   </h2>
                   <p className="text-xs text-slate-400">
-                    100% independent charitable gift
+                    Independent charitable contribution
                   </p>
                 </div>
               </div>
 
               <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-                Make a standalone donation directly to <strong className="text-white">{charity.name}</strong>.
-                Subscription is not required, and donations are processed instantly via Stripe.
+                Make an independent donation directly to <strong className="text-white">{charity.name}</strong>.
+                Membership is not required, and donations are processed securely via Stripe.
               </p>
 
               {errorMessage && (
@@ -397,7 +364,7 @@ export function CharityProfileClient({
                         type="button"
                         key={amt}
                         onClick={() => handleSelectPreset(amt)}
-                        disabled={!charity.is_active || isSubmitting}
+                        disabled={isSubmitting}
                         className={`py-2 px-3 rounded-xl text-sm font-bold transition-all ${
                           donationAmount === amt && customInput === ''
                             ? 'bg-gradient-to-r from-gold-400 to-amber-500 text-navy-950 shadow-md shadow-amber-500/20'
@@ -422,7 +389,7 @@ export function CharityProfileClient({
                       placeholder="Other amount (min £1)"
                       value={customInput}
                       onChange={handleCustomChange}
-                      disabled={!charity.is_active || isSubmitting}
+                      disabled={isSubmitting}
                       className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-navy-950/80 border border-white/10 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400"
                     />
                   </div>
@@ -435,10 +402,10 @@ export function CharityProfileClient({
                     <span>Important Information</span>
                   </div>
                   <p>
-                    • Direct donations are separate from the monthly prize draw and do not affect scoring or odds.
+                    • Direct donations are separate from the monthly prize draw and do not affect scoring or draw entries.
                   </p>
                   <p>
-                    • Securely processed via Stripe Checkout with instant payment receipt.
+                    • Securely processed via Stripe Checkout with instant receipt.
                   </p>
                 </div>
 
@@ -448,7 +415,7 @@ export function CharityProfileClient({
                   size="lg"
                   className="w-full justify-center"
                   isLoading={isSubmitting}
-                  disabled={!charity.is_active || isSubmitting || (!donationAmount && !customInput)}
+                  disabled={isSubmitting || (!donationAmount && !customInput)}
                   leftIcon={<Lock className="w-4 h-4" />}
                 >
                   {isSubmitting

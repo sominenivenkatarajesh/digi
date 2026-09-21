@@ -9,6 +9,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { ScoresCard } from '@/components/dashboard/ScoresCard';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency } from '@/lib/utils';
+import { calculateContribution, poundsToPence, penceToPounds } from '@/lib/charity/calculate';
 import {
   Sparkles,
   Heart,
@@ -76,6 +77,8 @@ function DashboardContent() {
   const [totalContributedSoFar, setTotalContributedSoFar] = useState<number>(0);
   const [activeCharities, setActiveCharities] = useState<ActiveCharityOption[]>([]);
   const [minPercent, setMinPercent] = useState<number>(10);
+  const [monthlyPrice, setMonthlyPrice] = useState<number>(10);
+  const [yearlyPrice, setYearlyPrice] = useState<number>(99);
 
   // Charity edit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -201,15 +204,21 @@ function DashboardContent() {
           setActiveCharities(charitiesList);
         }
 
-        // 5. Fetch platform settings for min charity percent
+        // 5. Fetch platform settings for pricing and min charity percent
         const { data: settingsData } = await supabase
           .from('platform_settings')
-          .select('min_charity_percent')
+          .select('min_charity_percent, monthly_price, yearly_price, monthly_subscription_price, annual_subscription_price')
           .limit(1)
           .maybeSingle();
 
-        if (settingsData?.min_charity_percent) {
-          setMinPercent(Number(settingsData.min_charity_percent));
+        if (settingsData) {
+          if (settingsData.min_charity_percent) {
+            setMinPercent(Number(settingsData.min_charity_percent));
+          }
+          const mPrice = Number(settingsData.monthly_price ?? settingsData.monthly_subscription_price ?? 10);
+          const yPrice = Number(settingsData.yearly_price ?? settingsData.annual_subscription_price ?? 99);
+          setMonthlyPrice(mPrice);
+          setYearlyPrice(yPrice);
         }
 
         // Auto-open modal if changeCharity URL param was passed
@@ -393,11 +402,12 @@ function DashboardContent() {
     }
   };
 
-  // Plan price calculation for charity split
+  // Plan price calculation for charity split (dynamically computed using canonical calculateContribution)
   const isYearly = subscription?.plan === 'yearly';
-  const planCost = isYearly ? 99 : 10;
+  const planCost = isYearly ? yearlyPrice : monthlyPrice;
   const planPeriodText = isYearly ? '/yr' : '/mo';
-  const charityAmountPerCycle = (planCost * (charity.percent / 100)).toFixed(2);
+  const charityPence = calculateContribution(poundsToPence(planCost), charity.percent, minPercent);
+  const charityAmountPerCycle = (charityPence / 100).toFixed(2);
 
   return (
     <main className="min-h-screen bg-navy-950 text-white pt-24 pb-20 selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -761,9 +771,9 @@ function DashboardContent() {
                     <div className="text-xs text-slate-300">
                       At <strong className="text-gold-300">{selectedPercent}%</strong>,{' '}
                       <strong className="text-emerald-400">
-                        £{((planCost * selectedPercent) / 100).toFixed(2)} {planPeriodText}
+                        £{(calculateContribution(poundsToPence(planCost), selectedPercent, minPercent) / 100).toFixed(2)} {planPeriodText}
                       </strong>{' '}
-                      of your {subscription?.plan || 'monthly'} fee will go directly to charity.
+                      of your {subscription?.plan || 'monthly'} fee (£{planCost.toFixed(2)}) will go directly to charity.
                     </div>
                   </div>
                 </div>

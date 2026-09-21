@@ -1,9 +1,9 @@
 -- Migration 006: Charity System
 -- Enhances charities table with categories, short_description and unique slugs,
 -- ensures donations.stripe_payment_id uniqueness, creates public.get_charity_totals(),
--- and enforces minimum charity percent via database trigger.
+-- seeds 6 distinct active charities with upcoming events, and enforces minimum charity percent via database trigger.
 
--- 1. Update charities table
+-- 1. Update charities table structure
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Community';
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS short_description TEXT;
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS slug TEXT;
@@ -14,26 +14,63 @@ SET
   slug = 'hope-horizons',
   category = 'Children & Healthcare',
   short_description = 'Transforming pediatric healthcare & critical care access for children facing severe illnesses.'
-WHERE name ILIKE '%Hope Horizons%' AND slug IS NULL;
+WHERE name ILIKE '%Hope Horizons%' AND (slug IS NULL OR slug = '');
 
 UPDATE public.charities
 SET
   slug = 'clean-oceans',
   category = 'Environment',
   short_description = 'Restoring marine ecosystems through plastic recovery and reef rehabilitation.'
-WHERE name ILIKE '%Clean Oceans%' AND slug IS NULL;
+WHERE name ILIKE '%Clean Oceans%' AND (slug IS NULL OR slug = '');
 
 UPDATE public.charities
 SET
   slug = 'emergency-shelter',
   category = 'Community & Housing',
   short_description = 'Rapid crisis relief and sustainable housing for vulnerable families in urban centers.'
-WHERE name ILIKE '%Emergency Shelter%' AND slug IS NULL;
+WHERE name ILIKE '%Emergency Shelter%' AND (slug IS NULL OR slug = '');
+
+-- Seed 3 additional charities so there are 6 distinct active causes across diverse categories
+INSERT INTO public.charities (name, slug, category, tagline, description, short_description, is_active, is_featured)
+SELECT
+  'Veterans Support Network',
+  'veterans-support',
+  'Veterans & Military',
+  'Dedicated rehabilitation and housing support for armed forces heroes',
+  'Providing specialized mental healthcare, accessible transitional housing, and career training for injured veterans transitioning into civilian life.',
+  'Comprehensive housing, mental health, and career rehabilitation for military veterans.',
+  true,
+  false
+WHERE NOT EXISTS (SELECT 1 FROM public.charities WHERE slug = 'veterans-support');
+
+INSERT INTO public.charities (name, slug, category, tagline, description, short_description, is_active, is_featured)
+SELECT
+  'Youth Education & Golf Trust',
+  'youth-education-trust',
+  'Education & Youth',
+  'Empowering underprivileged youth through STEM education and junior golf',
+  'Funding academic scholarships, technology access, and grassroots junior golf programs to inspire resilience, character, and lifelong opportunities.',
+  'STEM scholarships and grassroots youth sports programs for disadvantaged children.',
+  true,
+  false
+WHERE NOT EXISTS (SELECT 1 FROM public.charities WHERE slug = 'youth-education-trust');
+
+INSERT INTO public.charities (name, slug, category, tagline, description, short_description, is_active, is_featured)
+SELECT
+  'Green Canopy National Forests',
+  'green-canopy-forests',
+  'Conservation',
+  'Reforesting native UK woodlands and protecting wildlife habitats',
+  'Restoring ancient native woodlands, planting indigenous trees, and creating natural green corridors to safeguard endangered British wildlife.',
+  'Restoring indigenous British forests and protecting native woodland biodiversity.',
+  true,
+  false
+WHERE NOT EXISTS (SELECT 1 FROM public.charities WHERE slug = 'green-canopy-forests');
 
 -- Ensure any existing charity without a slug gets an auto-generated one
 UPDATE public.charities
 SET slug = lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g'))
-WHERE slug IS NULL;
+WHERE slug IS NULL OR slug = '';
 
 -- Enforce unique constraint on charities.slug
 DO $$
@@ -97,6 +134,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_charity_totals() TO anon, authenticated;
 
 -- 4. Database Trigger: Enforce minimum charity contribution percent
+-- Only fires when charity_percent is inserted or changed; defaults safely so signup is never broken
 CREATE OR REPLACE FUNCTION public.check_charity_percent_min()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -106,17 +144,25 @@ AS $$
 DECLARE
   v_min_pct NUMERIC;
 BEGIN
-  SELECT min_charity_percent INTO v_min_pct FROM public.platform_settings LIMIT 1;
-  IF v_min_pct IS NULL THEN
-    v_min_pct := 10;
+  -- Default to 10 if null
+  IF NEW.charity_percent IS NULL THEN
+    NEW.charity_percent := 10;
   END IF;
 
-  IF NEW.charity_percent < v_min_pct THEN
-    RAISE EXCEPTION 'Charity contribution percent cannot be less than % percent', v_min_pct;
-  END IF;
+  -- Only enforce when charity_percent is inserted or changed
+  IF (TG_OP = 'INSERT') OR (TG_OP = 'UPDATE' AND (OLD.charity_percent IS DISTINCT FROM NEW.charity_percent)) THEN
+    SELECT min_charity_percent INTO v_min_pct FROM public.platform_settings LIMIT 1;
+    IF v_min_pct IS NULL THEN
+      v_min_pct := 10;
+    END IF;
 
-  IF NEW.charity_percent > 100 THEN
-    RAISE EXCEPTION 'Charity contribution percent cannot exceed 100 percent';
+    IF NEW.charity_percent < v_min_pct THEN
+      RAISE EXCEPTION 'Charity contribution percent cannot be less than % percent', v_min_pct;
+    END IF;
+
+    IF NEW.charity_percent > 100 THEN
+      RAISE EXCEPTION 'Charity contribution percent cannot exceed 100 percent';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -129,43 +175,65 @@ CREATE TRIGGER trigger_check_charity_percent
   FOR EACH ROW
   EXECUTE FUNCTION public.check_charity_percent_min();
 
--- 5. Seed sample charity events including charity golf days
+-- 5. Seed sample charity events including charity golf days across the charities
 DO $$
 DECLARE
   v_hope_id UUID;
   v_ocean_id UUID;
+  v_vet_id UUID;
+  v_youth_id UUID;
 BEGIN
   SELECT id INTO v_hope_id FROM public.charities WHERE slug = 'hope-horizons' LIMIT 1;
   SELECT id INTO v_ocean_id FROM public.charities WHERE slug = 'clean-oceans' LIMIT 1;
+  SELECT id INTO v_vet_id FROM public.charities WHERE slug = 'veterans-support' LIMIT 1;
+  SELECT id INTO v_youth_id FROM public.charities WHERE slug = 'youth-education-trust' LIMIT 1;
 
-  IF v_hope_id IS NOT NULL THEN
+  IF v_hope_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.charity_events WHERE charity_id = v_hope_id AND title ILIKE '%Charity Golf Classic%') THEN
     INSERT INTO public.charity_events (charity_id, title, event_date, location, description)
-    VALUES
-      (
-        v_hope_id,
-        'Annual Digital Heroes Charity Golf Classic',
-        now() + interval '14 days',
-        'Wentworth Golf Club, Surrey',
-        '18-hole Stableford tournament and evening charity dinner supporting pediatric intensive care programs.'
-      )
-    ON CONFLICT DO NOTHING;
+    VALUES (
+      v_hope_id,
+      'Annual Digital Heroes Charity Golf Classic',
+      now() + interval '14 days',
+      'Wentworth Golf Club, Surrey',
+      '18-hole Stableford tournament and evening charity dinner supporting pediatric intensive care programs.'
+    );
   END IF;
 
-  IF v_ocean_id IS NOT NULL THEN
+  IF v_ocean_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.charity_events WHERE charity_id = v_ocean_id AND title ILIKE '%Coastal Links%') THEN
     INSERT INTO public.charity_events (charity_id, title, event_date, location, description)
-    VALUES
-      (
-        v_ocean_id,
-        'Coastal Links Charity Pro-Am Invitational',
-        now() + interval '30 days',
-        'Royal St George''s, Kent',
-        'Competitive links golf tournament and marine habitat conservation gala dinner.'
-      )
-    ON CONFLICT DO NOTHING;
+    VALUES (
+      v_ocean_id,
+      'Coastal Links Charity Pro-Am Invitational',
+      now() + interval '30 days',
+      'Royal St George''s, Kent',
+      'Competitive links golf tournament and marine habitat conservation gala dinner.'
+    );
+  END IF;
+
+  IF v_vet_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.charity_events WHERE charity_id = v_vet_id AND title ILIKE '%Veterans Charity Scramble%') THEN
+    INSERT INTO public.charity_events (charity_id, title, event_date, location, description)
+    VALUES (
+      v_vet_id,
+      'Heroes Fore Veterans Golf Scramble',
+      now() + interval '42 days',
+      'The Belfry, Sutton Coldfield',
+      'Team scramble competition uniting golfers, veterans, and supporters for transitional housing funds.'
+    );
+  END IF;
+
+  IF v_youth_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.charity_events WHERE charity_id = v_youth_id AND title ILIKE '%Junior Golf Masters%') THEN
+    INSERT INTO public.charity_events (charity_id, title, event_date, location, description)
+    VALUES (
+      v_youth_id,
+      'NextGen Junior Golf Masters & STEM Fair',
+      now() + interval '24 days',
+      'Centurion Club, St Albans',
+      'Youth skills showcase, clinic with PGA professionals, and STEM scholarship awards banquet.'
+    );
   END IF;
 END $$;
 
--- 6. Update handle_new_user() trigger function to persist charity_id and charity_percent
+-- 6. Update handle_new_user() trigger function to persist charity_id and charity_percent safely
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -213,4 +281,3 @@ BEGIN
   RETURN new;
 END;
 $$;
-

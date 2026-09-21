@@ -15,10 +15,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const supabase = await createClient();
 
+  // Query strictly by slug and ensure charity is active (no UUID fallback for inactive)
   const { data: charity } = await supabase
     .from('charities')
     .select('name, tagline, description, short_description')
-    .or(`slug.eq.${slug},id.eq.${slug}`)
+    .eq('slug', slug)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (!charity) {
@@ -28,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   return {
-    title: `${charity.name} | Verified Charity Partner | Digital Heroes`,
+    title: `${charity.name} | Digital Heroes`,
     description: charity.short_description || charity.tagline || charity.description?.slice(0, 160),
   };
 }
@@ -40,11 +42,12 @@ export default async function CharityProfilePage({ params, searchParams }: PageP
 
   const supabase = await createClient();
 
-  // 1. Fetch charity by slug or id
+  // 1. Fetch charity strictly by slug and require is_active = true (Inactive charities return 404)
   const { data: charity, error: charityError } = await supabase
     .from('charities')
-    .select('*')
-    .or(`slug.eq.${slug},id.eq.${slug}`)
+    .select('id, name, slug, tagline, description, short_description, category, impact_metric, website_url, logo_url, image_url, is_featured, is_active')
+    .eq('slug', slug)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (charityError || !charity) {
@@ -66,7 +69,7 @@ export default async function CharityProfilePage({ params, searchParams }: PageP
   const todayIso = new Date().toISOString();
   const { data: eventsData } = await supabase
     .from('charity_events')
-    .select('*')
+    .select('id, charity_id, title, event_date, location, description')
     .eq('charity_id', charity.id)
     .gte('event_date', todayIso)
     .order('event_date', { ascending: true });

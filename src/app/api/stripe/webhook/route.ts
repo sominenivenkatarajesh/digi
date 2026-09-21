@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getStripeClient } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { calculateContributionPounds } from '@/lib/charity/calculate';
+import { calculateContribution } from '@/lib/charity/calculate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,8 +67,12 @@ export async function POST(req: Request) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        // Branch 1: Independent Donation Session (mode = 'payment')
-        if (session.mode === 'payment' && session.metadata?.type === 'donation') {
+        // Branch 1: Independent Donation Session (mode = 'payment', type = 'donation', payment_status = 'paid')
+        if (
+          session.metadata?.type === 'donation' &&
+          session.mode === 'payment' &&
+          session.payment_status === 'paid'
+        ) {
           const charityId = session.metadata.charity_id;
           const userId = session.metadata.user_id || null;
           const amountTotal = (session.amount_total || 0) / 100;
@@ -94,7 +98,9 @@ export async function POST(req: Request) {
               throw donationError;
             }
           }
-          break;
+
+          // Return immediately: donation complete, do not touch subscription logic
+          return NextResponse.json({ received: true, type: 'donation' });
         }
 
         // Branch 2: Membership Subscription Session (Phase 2)
@@ -315,7 +321,9 @@ export async function POST(req: Request) {
         const charityId = profile?.charity_id || null;
 
         const poolAmount = Number(((amountPaid * prizePoolPercent) / 100).toFixed(2));
-        const charityAmount = calculateContributionPounds(amountPaid, charityPercent, minCharityPercent);
+        const amountPence = Math.round(amountPaid * 100);
+        const charityPence = calculateContribution(amountPence, charityPercent, minCharityPercent);
+        const charityAmount = charityPence / 100;
         const paidAt = invoice.status_transitions?.paid_at
           ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
           : new Date().toISOString();

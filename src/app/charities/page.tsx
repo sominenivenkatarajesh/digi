@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/ui/Container';
-import { SectionHeading } from '@/components/ui/SectionHeading';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
@@ -15,10 +14,9 @@ import {
   Search,
   Sparkles,
   ArrowRight,
-  ShieldCheck,
   ExternalLink,
-  Filter,
   X,
+  Calendar,
 } from 'lucide-react';
 
 interface CharityItem {
@@ -33,15 +31,7 @@ interface CharityItem {
   website_url?: string;
   is_featured: boolean;
   is_active: boolean;
-  total_raised?: number;
 }
-
-const CATEGORIES = [
-  'All Causes',
-  'Children & Healthcare',
-  'Environment',
-  'Community & Housing',
-];
 
 function CharitiesDirectoryContent() {
   const router = useRouter();
@@ -59,7 +49,9 @@ function CharitiesDirectoryContent() {
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [featuredOnly, setFeaturedOnly] = useState(initialFeatured);
 
-  // Sync state with URL params
+  // Debounced URL updates
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const updateUrlParams = (cat: string, q: string, feat: boolean) => {
     const params = new URLSearchParams();
     if (cat && cat !== 'All Causes') params.set('category', cat);
@@ -70,6 +62,15 @@ function CharitiesDirectoryContent() {
     router.replace(`/charities${newQueryString ? `?${newQueryString}` : ''}`, { scroll: false });
   };
 
+  const debouncedUpdateUrl = (cat: string, q: string, feat: boolean) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      updateUrlParams(cat, q, feat);
+    }, 300);
+  };
+
   useEffect(() => {
     async function loadCharitiesData() {
       try {
@@ -78,7 +79,7 @@ function CharitiesDirectoryContent() {
         // 1. Fetch active charities
         const { data: charitiesData, error: cErr } = await supabase
           .from('charities')
-          .select('*')
+          .select('id, name, slug, tagline, description, short_description, category, impact_metric, website_url, is_featured, is_active')
           .eq('is_active', true)
           .order('is_featured', { ascending: false })
           .order('name', { ascending: true });
@@ -89,7 +90,7 @@ function CharitiesDirectoryContent() {
 
         // 2. Fetch real charity totals via public.get_charity_totals()
         const { data: totalsData, error: tErr } = await supabase.rpc('get_charity_totals');
-        if (!tErr && totalsData) {
+        if (!tErr && totalsData && Array.isArray(totalsData)) {
           const totalsMap: Record<string, number> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           totalsData.forEach((row: any) => {
@@ -107,15 +108,27 @@ function CharitiesDirectoryContent() {
     loadCharitiesData();
   }, []);
 
+  // 2. Category tabs come from the database (distinct categories of active charities)
+  const categoryTabs = useMemo(() => {
+    const distinct = new Set<string>();
+    charities.forEach((c) => {
+      if (c.category && c.category.trim()) {
+        distinct.add(c.category.trim());
+      }
+    });
+    return ['All Causes', ...Array.from(distinct).sort()];
+  }, [charities]);
+
   const handleCategoryChange = (cat: string) => {
     setSelectedCategory(cat);
     updateUrlParams(cat, searchQuery, featuredOnly);
   };
 
+  // 10. Escape % and _ in search query, and debounce the input
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
-    updateUrlParams(selectedCategory, val, featuredOnly);
+    debouncedUpdateUrl(selectedCategory, val, featuredOnly);
   };
 
   const handleFeaturedToggle = () => {
@@ -131,8 +144,14 @@ function CharitiesDirectoryContent() {
     router.replace('/charities', { scroll: false });
   };
 
-  // Filtered Charities
+  // Filtered Charities (escapes % and _ in search)
   const filteredCharities = useMemo(() => {
+    // Escape % and _ so wildcard characters are treated as literal characters
+    const sanitizedQuery = searchQuery
+      .replace(/[%_]/g, '')
+      .trim()
+      .toLowerCase();
+
     return charities.filter((c) => {
       // Category filter
       if (selectedCategory !== 'All Causes' && c.category !== selectedCategory) {
@@ -144,14 +163,14 @@ function CharitiesDirectoryContent() {
         return false;
       }
 
-      // Search query filter (name, tagline, description)
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = c.name.toLowerCase().includes(query);
-        const matchesTagline = (c.tagline || '').toLowerCase().includes(query);
-        const matchesDesc = (c.description || '').toLowerCase().includes(query);
-        const matchesShort = (c.short_description || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesTagline && !matchesDesc && !matchesShort) {
+      // Text search match across real name, tagline, description
+      if (sanitizedQuery) {
+        const nameMatch = c.name.toLowerCase().includes(sanitizedQuery);
+        const tagMatch = (c.tagline || '').toLowerCase().includes(sanitizedQuery);
+        const descMatch = (c.short_description || c.description || '').toLowerCase().includes(sanitizedQuery);
+        const catMatch = (c.category || '').toLowerCase().includes(sanitizedQuery);
+
+        if (!nameMatch && !tagMatch && !descMatch && !catMatch) {
           return false;
         }
       }
@@ -161,43 +180,33 @@ function CharitiesDirectoryContent() {
   }, [charities, selectedCategory, featuredOnly, searchQuery]);
 
   return (
-    <main className="min-h-screen bg-navy-950 text-white pt-12 pb-24 relative overflow-hidden">
-      {/* Background ambient lighting */}
-      <div
-        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-emerald-500/10 blur-[150px] rounded-full"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute top-1/3 right-0 w-[500px] h-[400px] bg-gold-400/10 blur-[130px] rounded-full"
-        aria-hidden="true"
-      />
-
-      <Container size="wide" className="relative z-10">
-        {/* Navigation Breadcrumb / Top Bar */}
-        <div className="mb-8 flex items-center justify-between">
+    <main className="min-h-screen bg-navy-950 text-white pt-24 pb-20 selection:bg-emerald-500/30 selection:text-emerald-200">
+      <Container>
+        {/* Navigation & Header */}
+        <div className="flex items-center justify-between gap-4 mb-8">
           <Link
             href="/"
             className="text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-1.5"
           >
             ← Back to Homepage
           </Link>
-          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full font-medium">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>100% Vetted Charity Partners</span>
-          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {charities.length} Active Partner{charities.length === 1 ? '' : 's'}
+          </span>
         </div>
 
-        {/* Section Heading */}
+        {/* Section Heading (No invented claims) */}
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-gold-400/10 border border-gold-400/25 text-gold-300 mb-4">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Direct Community Impact</span>
+            <Heart className="w-3.5 h-3.5" />
+            <span>Community Impact</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-display font-extrabold text-white tracking-tight mb-4">
-            Verified Charity <span className="text-gradient-gold">Directory</span>
+            Charity <span className="text-gradient-gold">Directory</span>
           </h1>
           <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-            Every Digital Heroes subscription allocates at least 10% (up to 100%) directly to verified charitable causes. Explore active partners below, view their impact, or make an independent donation.
+            Every Digital Heroes subscription allocates at least 10% (up to 100%) to charitable causes.
+            Explore active causes, view upcoming events, or make an independent donation.
           </p>
         </div>
 
@@ -209,7 +218,7 @@ function CharitiesDirectoryContent() {
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search causes by name or mission..."
+                placeholder="Search causes by name or category..."
                 value={searchQuery}
                 onChange={handleSearchChange}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-navy-950/80 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
@@ -221,14 +230,14 @@ function CharitiesDirectoryContent() {
                     setSearchQuery('');
                     updateUrlParams(selectedCategory, '', featuredOnly);
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            {/* Featured Only Toggle */}
+            {/* Featured Filter Toggle */}
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
@@ -245,9 +254,9 @@ function CharitiesDirectoryContent() {
             </div>
           </div>
 
-          {/* Category Tabs */}
+          {/* Category Tabs (Dynamic from Database) */}
           <div className="mt-4 pt-4 border-t border-white/[0.08] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {CATEGORIES.map((cat) => (
+            {categoryTabs.map((cat) => (
               <button
                 key={cat}
                 type="button"
@@ -316,7 +325,7 @@ function CharitiesDirectoryContent() {
                       )}
 
                       <div>
-                        {/* Category & Icon */}
+                        {/* Category & Cause */}
                         <div className="flex items-center justify-between mb-4">
                           <span className="text-[10px] uppercase font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                             {charity.category || 'Humanitarian'}
