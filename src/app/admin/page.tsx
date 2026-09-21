@@ -150,6 +150,11 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link href="/admin/draws">
+              <Button variant="primary" size="sm" leftIcon={<Sparkles className="w-3.5 h-3.5" />}>
+                Draw Engine
+              </Button>
+            </Link>
             <Button href="/dashboard" variant="secondary" size="sm">
               Member Dashboard
             </Button>
@@ -166,13 +171,20 @@ export default function AdminPage() {
       </header>
 
       <Container size="wide" className="pt-10 relative z-10">
-        <div className="mb-10">
-          <h1 className="text-3xl font-display font-extrabold text-white">
-            Platform Administration
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Configure monthly draw parameters, subscription pricing, and verified charities.
-          </p>
+        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-display font-extrabold text-white">
+              Platform Administration
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              Configure monthly draw parameters, subscription pricing, and verified charities.
+            </p>
+          </div>
+          <Link href="/admin/draws">
+            <Button variant="primary" leftIcon={<Sparkles className="w-4 h-4 text-gold-400" />}>
+              Open Draw Engine & Simulations →
+            </Button>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

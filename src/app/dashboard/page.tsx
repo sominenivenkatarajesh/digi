@@ -106,6 +106,35 @@ function DashboardContent() {
   const [isBillingLoading, setIsBillingLoading] = useState(false);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
 
+  // Phase 5: Latest Published Draw State
+  const [latestDrawInfo, setLatestDrawInfo] = useState<{
+    draw: {
+      id: string;
+      draw_month: string;
+      mode: string;
+      winning_numbers: number[];
+      pool_total: number;
+      tier5_pool: number;
+      tier4_pool: number;
+      tier3_pool: number;
+      jackpot_carried_in: number;
+      jackpot_rolled_over: number;
+      published_at: string;
+    } | null;
+    userEntry: {
+      id: string;
+      scores_snapshot: number[];
+      match_count: number;
+    } | null;
+    userWin: {
+      id: string;
+      tier: string;
+      prize_amount: number;
+      verification_status: string;
+      payment_status: string;
+    } | null;
+  } | null>(null);
+
   useEffect(() => {
     async function loadUserData() {
       try {
@@ -245,6 +274,17 @@ function DashboardContent() {
           const yPrice = Number(settingsData.yearly_price ?? settingsData.annual_subscription_price ?? 99);
           setMonthlyPrice(mPrice);
           setYearlyPrice(yPrice);
+        }
+
+        // 6. Fetch latest published draw and user entry
+        try {
+          const drawRes = await fetch('/api/draws/latest');
+          if (drawRes.ok) {
+            const drawData = await drawRes.json();
+            setLatestDrawInfo(drawData);
+          }
+        } catch (e) {
+          console.error('Failed to load latest draw:', e);
         }
 
         // Auto-open modal if changeCharity URL param was passed
@@ -709,19 +749,149 @@ function DashboardContent() {
           isAdmin={subscription?.isAdmin || false}
         />
 
-        {/* SECTION 3: Live 5-Number Monthly Draw Ticket */}
+        {/* SECTION 3A: Latest Official Draw (Phase 5) */}
+        {latestDrawInfo?.draw && (
+          <div className="mt-12 mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Trophy className="w-5 h-5 text-gold-400" />
+                  <h2 className="text-xl font-display font-bold text-white">
+                    Latest Official Draw — {new Date(latestDrawInfo.draw.draw_month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                  </h2>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    Official Results
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Published {latestDrawInfo.draw.published_at ? new Date(latestDrawInfo.draw.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''} • Mode: <span className="capitalize text-slate-300 font-medium">{latestDrawInfo.draw.mode}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Total Prize Pool:</span>
+                <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/25 text-sm">
+                  {formatPrice(Number(latestDrawInfo.draw.pool_total || 0))}
+                </span>
+              </div>
+            </div>
+
+            <GlassCard glowColor="gold" className="p-6 sm:p-8 relative overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                {/* Winning Numbers */}
+                <div className="lg:col-span-6 space-y-3">
+                  <div className="text-xs uppercase font-semibold text-gold-400 tracking-wider flex items-center justify-between">
+                    <span>Official Winning Numbers (1-45)</span>
+                    <span className="text-[11px] text-slate-400 font-mono">5 Numbers Drawn</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {latestDrawInfo.draw.winning_numbers?.map((num, i) => (
+                      <div
+                        key={i}
+                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-400 via-amber-500 to-amber-600 text-slate-950 font-black text-xl sm:text-2xl flex items-center justify-center shadow-lg shadow-amber-500/25 border-2 border-amber-200"
+                      >
+                        {num}
+                      </div>
+                    ))}
+                  </div>
+                  {Number(latestDrawInfo.draw.jackpot_rolled_over || 0) > 0 && (
+                    <p className="text-xs text-amber-300 flex items-center gap-1.5 pt-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Jackpot rolled over! {formatPrice(Number(latestDrawInfo.draw.jackpot_rolled_over))} carries into next month&apos;s draw.
+                    </p>
+                  )}
+                </div>
+
+                {/* User Entry Result (Snapshot from draw_entries, never live scores) */}
+                <div className="lg:col-span-6 p-5 rounded-2xl bg-navy-950/80 border border-white/10">
+                  {latestDrawInfo.userEntry ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs uppercase font-semibold text-slate-300 tracking-wider">
+                          Your Draw Entry (Scores Locked at Draw)
+                        </span>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {latestDrawInfo.userEntry.match_count} {latestDrawInfo.userEntry.match_count === 1 ? 'Match' : 'Matches'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-4">
+                        {latestDrawInfo.userEntry.scores_snapshot?.map((score, idx) => {
+                          const isMatch = latestDrawInfo.draw?.winning_numbers?.includes(score);
+                          return (
+                            <div key={idx} className="flex flex-col items-center">
+                              <div
+                                className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg transition ${
+                                  isMatch
+                                    ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 shadow-md shadow-amber-500/40'
+                                    : 'bg-slate-900 border border-slate-700 text-slate-300'
+                                }`}
+                              >
+                                {score}
+                              </div>
+                              {isMatch && (
+                                <span className="text-[10px] font-bold text-amber-400 mt-1">MATCH</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {latestDrawInfo.userWin ? (
+                        <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs">
+                          <div className="font-bold flex items-center gap-1.5 text-sm text-emerald-300">
+                            <Trophy className="w-4 h-4 text-emerald-400" />
+                            Congratulations! You won {formatPrice(Number(latestDrawInfo.userWin.prize_amount))}!
+                          </div>
+                          <p className="mt-1 text-[11px] text-emerald-300/80">
+                            Tier {latestDrawInfo.userWin.tier} Winner • Status: {latestDrawInfo.userWin.verification_status.toUpperCase()}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">
+                          {latestDrawInfo.userEntry.match_count >= 3
+                            ? 'Matches recorded for this draw.'
+                            : 'No cash prize won this month. (Minimum 3 matches required to win a cash prize).'}
+                        </p>
+                      )}
+
+                      <p className="text-[10px] text-slate-500 mt-3 pt-2 border-t border-white/5">
+                        🔒 Stored snapshot used: live score edits do not change this published result.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-80" />
+                      <p className="text-sm font-semibold text-white mb-1">
+                        You were not entered in this draw
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        {!subscription?.isActive
+                          ? 'An active subscription is required to participate in official monthly draws.'
+                          : userScores.length < 5
+                          ? `You have ${userScores.length}/5 scores submitted. Exactly 5 Stableford scores are required to qualify.`
+                          : 'Your account was not eligible at the time this draw was published.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        )}
+
+        {/* SECTION 3B: Upcoming Monthly Draw Entry (No tickets — 5 Stableford scores) */}
         <div className="mt-12 mb-12">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Ticket className="w-5 h-5 text-gold-400" />
-                <h2 className="text-xl font-display font-bold text-white">Your Official Draw Ticket</h2>
+                <h2 className="text-xl font-display font-bold text-white">Upcoming Draw Entry</h2>
                 <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400 border border-gold-500/30">
-                  Draw #29
+                  Next Monthly Draw
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Your 5 Stableford scores automatically form your unique 5-number combination for the upcoming monthly cash draw.
+                No tickets or lottery numbers assigned. Your 5 stored Stableford scores are matched against the 5 winning numbers in each draw.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -736,12 +906,12 @@ function DashboardContent() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-gold-500/5 rounded-full blur-3xl pointer-events-none" />
 
             <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
-              {/* Ticket Numbers Grid */}
+              {/* Scores Grid */}
               <div className="w-full lg:w-auto">
                 <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-3 flex items-center justify-between">
-                  <span>Your 5 Draw Numbers (1-45):</span>
-                  <span className="text-emerald-400 font-mono">
-                    {userScores.length === 5 ? '✓ Ticket Complete' : `${userScores.length}/5 Numbers Set`}
+                  <span>Your Current 5 Scores (1-45):</span>
+                  <span className={userScores.length === 5 ? 'text-emerald-400 font-mono font-semibold' : 'text-amber-400 font-mono font-semibold'}>
+                    {userScores.length === 5 ? '✓ 5/5 Scores Complete (Eligible)' : `${userScores.length}/5 Scores (Need Exactly 5)`}
                   </span>
                 </div>
 
@@ -771,24 +941,25 @@ function DashboardContent() {
               {/* Draw Status & Countdown Info */}
               <div className="w-full lg:max-w-xs p-5 rounded-2xl bg-navy-950/70 border border-white/10 space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Draw Date:</span>
+                  <span className="text-slate-400">Draw Schedule:</span>
                   <span className="font-semibold text-white">1st of Next Month</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Execution Time:</span>
-                  <span className="font-mono text-slate-300">00:00:00 UTC</span>
+                  <span className="text-slate-400">Draw Engine:</span>
+                  <span className="font-mono text-slate-300">5 Numbers (1-45)</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Verification:</span>
-                  <span className="text-emerald-400 font-medium flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Provably Fair VRF</span>
-                  </span>
+                  <span className="text-slate-400">Matching Rule:</span>
+                  <span className="text-slate-300 font-medium">3, 4, or 5 matches</span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-slate-400">Eligibility:</span>
-                  <span className={subscription?.isActive ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                    {subscription?.isActive ? 'Active Member' : 'Inactive (Subscribe to Qualify)'}
+                  <span className="text-slate-400">Draw Qualification:</span>
+                  <span className={subscription?.isActive && userScores.length === 5 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                    {subscription?.isActive && userScores.length === 5
+                      ? 'Fully Qualified'
+                      : !subscription?.isActive
+                      ? 'Subscribe to Qualify'
+                      : 'Add 5 Scores'}
                   </span>
                 </div>
               </div>
