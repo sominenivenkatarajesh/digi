@@ -134,25 +134,16 @@ BEGIN
     new.id,
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    COALESCE(new.raw_user_meta_data->>'role', 'member')
+    'subscriber'
   )
   ON CONFLICT (id) DO UPDATE
   SET
     email = EXCLUDED.email,
     full_name = EXCLUDED.full_name;
 
-  -- If charity_id was provided in user metadata, create initial subscription
-  IF new.raw_user_meta_data->>'charity_id' IS NOT NULL THEN
-    INSERT INTO public.subscriptions (user_id, charity_id, plan_type, status)
-    VALUES (
-      new.id,
-      (new.raw_user_meta_data->>'charity_id')::UUID,
-      COALESCE(new.raw_user_meta_data->>'plan_type', 'monthly'),
-      'active'
-    )
-    ON CONFLICT DO NOTHING;
-  END IF;
-
+  RETURN new;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'handle_new_user error: %', SQLERRM;
   RETURN new;
 END;
 $$;

@@ -123,6 +123,11 @@ function SignupForm() {
     setIsLoading(true);
 
     try {
+      // Only pass charity_id if it corresponds to an actual loaded database charity
+      const isValidDbCharity = charities.some(
+        (c) => c.id === formData.charityId && !c.id.startsWith('f87a8b') && !c.id.startsWith('a12b3c') && !c.id.startsWith('c98d7e')
+      );
+
       const supabase = createClient();
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
@@ -130,7 +135,7 @@ function SignupForm() {
         options: {
           data: {
             full_name: formData.fullName,
-            charity_id: formData.charityId,
+            ...(isValidDbCharity && formData.charityId ? { charity_id: formData.charityId } : {}),
             charity_percent: formData.charityPercent || 10,
             plan_type: formData.planType,
             role: 'subscriber',

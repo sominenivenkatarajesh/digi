@@ -241,20 +241,29 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_charity_id UUID;
-  v_charity_pct NUMERIC;
+  v_charity_id UUID := NULL;
+  v_charity_pct NUMERIC := 10;
+  v_role TEXT := 'subscriber';
+  v_meta_role TEXT;
+  v_raw_charity TEXT;
 BEGIN
-  IF new.raw_user_meta_data->>'charity_id' IS NOT NULL THEN
-    BEGIN
-      v_charity_id := (new.raw_user_meta_data->>'charity_id')::UUID;
-    EXCEPTION WHEN OTHERS THEN
-      v_charity_id := NULL;
-    END;
+  -- 1. Determine safe role (strictly 'subscriber' or 'admin', default 'subscriber')
+  v_meta_role := lower(COALESCE(new.raw_user_meta_data->>'role', 'subscriber'));
+  IF v_meta_role IN ('subscriber', 'admin') THEN
+    v_role := v_meta_role;
+  ELSE
+    v_role := 'subscriber';
   END IF;
 
+  -- 2. Validate charity_percent (must be between 10 and 100)
   IF new.raw_user_meta_data->>'charity_percent' IS NOT NULL THEN
     BEGIN
       v_charity_pct := (new.raw_user_meta_data->>'charity_percent')::NUMERIC;
+      IF v_charity_pct < 10 THEN
+        v_charity_pct := 10;
+      ELSIF v_charity_pct > 100 THEN
+        v_charity_pct := 100;
+      END IF;
     EXCEPTION WHEN OTHERS THEN
       v_charity_pct := 10;
     END;
@@ -262,22 +271,70 @@ BEGIN
     v_charity_pct := 10;
   END IF;
 
-  INSERT INTO public.profiles (id, email, full_name, role, charity_id, charity_percent)
-  VALUES (
-    new.id,
-    new.email,
-    COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    COALESCE(new.raw_user_meta_data->>'role', 'member'),
-    v_charity_id,
-    GREATEST(10, COALESCE(v_charity_pct, 10))
-  )
-  ON CONFLICT (id) DO UPDATE
-  SET
-    email = EXCLUDED.email,
-    full_name = EXCLUDED.full_name,
-    charity_id = COALESCE(EXCLUDED.charity_id, public.profiles.charity_id),
-    charity_percent = COALESCE(EXCLUDED.charity_percent, public.profiles.charity_percent);
+  -- 3. Validate charity_id: ensure it is a valid UUID AND actually exists in public.charities
+  v_raw_charity := new.raw_user_meta_data->>'charity_id';
+  IF v_raw_charity IS NOT NULL AND v_raw_charity <> '' THEN
+    BEGIN
+      SELECT id INTO v_charity_id
+      FROM public.charities
+      WHERE id = v_raw_charity::UUID
+      LIMIT 1;
+    EXCEPTION WHEN OTHERS THEN
+      v_charity_id := NULL;
+    END;
+  END IF;
+
+  -- If no valid charity was found from metadata, assign the first active charity
+  IF v_charity_id IS NULL THEN
+    SELECT id INTO v_charity_id
+    FROM public.charities
+    WHERE is_active = true
+    ORDER BY is_featured DESC, name ASC
+    LIMIT 1;
+  END IF;
+
+  -- 4. Safely insert or update profile inside an exception block so auth signup NEVER fails
+  BEGIN
+    INSERT INTO public.profiles (id, email, full_name, role, charity_id, charity_percent)
+    VALUES (
+      new.id,
+      new.email,
+      COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+      v_role,
+      v_charity_id,
+      v_charity_pct
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name,
+      role = COALESCE(public.profiles.role, EXCLUDED.role),
+      charity_id = COALESCE(EXCLUDED.charity_id, public.profiles.charity_id),
+      charity_percent = COALESCE(EXCLUDED.charity_percent, public.profiles.charity_percent);
+  EXCEPTION WHEN OTHERS THEN
+    -- Fallback minimal insert to ensure auth signup succeeds even if charity/role has unexpected issue
+    BEGIN
+      INSERT INTO public.profiles (id, email, full_name, role)
+      VALUES (
+        new.id,
+        new.email,
+        COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+        'subscriber'
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET
+        email = EXCLUDED.email,
+        full_name = EXCLUDED.full_name;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'handle_new_user error: %', SQLERRM;
+    END;
+  END;
 
   RETURN new;
 END;
 $$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
