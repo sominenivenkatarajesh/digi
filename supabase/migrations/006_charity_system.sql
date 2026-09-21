@@ -7,6 +7,14 @@
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Community';
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS short_description TEXT;
 ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.charities ADD COLUMN IF NOT EXISTS logo_url TEXT;
+
+-- 1b. Fix profiles table role column and constraint
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'subscriber';
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+UPDATE public.profiles SET role = 'subscriber' WHERE role NOT IN ('subscriber', 'admin') OR role IS NULL;
+ALTER TABLE public.profiles ALTER COLUMN role SET DEFAULT 'subscriber';
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('subscriber', 'admin'));
 
 -- Seed and update the 3 default verified charities with slugs, categories, and short descriptions
 UPDATE public.charities
