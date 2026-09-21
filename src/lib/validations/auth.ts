@@ -12,6 +12,11 @@ export const signupSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: passwordSchema,
   charityId: z.string().min(1, 'Please select a charity to support'),
+  charityPercent: z.coerce
+    .number()
+    .min(10, 'Minimum contribution is 10%')
+    .max(100, 'Maximum contribution is 100%')
+    .default(10),
   planType: z.enum(['monthly', 'yearly']).default('monthly'),
 });
 

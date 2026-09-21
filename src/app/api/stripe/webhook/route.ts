@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getStripeClient } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { calculateContributionPounds } from '@/lib/charity/calculate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,6 +66,38 @@ export async function POST(req: Request) {
       // 1. Checkout Session Completed
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Branch 1: Independent Donation Session (mode = 'payment')
+        if (session.mode === 'payment' && session.metadata?.type === 'donation') {
+          const charityId = session.metadata.charity_id;
+          const userId = session.metadata.user_id || null;
+          const amountTotal = (session.amount_total || 0) / 100;
+          const stripePaymentId =
+            typeof session.payment_intent === 'string'
+              ? session.payment_intent
+              : session.id;
+
+          if (charityId && amountTotal > 0) {
+            const { error: donationError } = await supabase.from('donations').upsert(
+              {
+                charity_id: charityId,
+                user_id: userId,
+                amount: amountTotal,
+                stripe_payment_id: stripePaymentId,
+                created_at: new Date().toISOString(),
+              },
+              { onConflict: 'stripe_payment_id', ignoreDuplicates: true }
+            );
+
+            if (donationError) {
+              console.error('[Stripe Webhook] Error recording donation:', donationError);
+              throw donationError;
+            }
+          }
+          break;
+        }
+
+        // Branch 2: Membership Subscription Session (Phase 2)
         const userId = session.metadata?.user_id;
         const plan = (session.metadata?.plan as 'monthly' | 'yearly') || 'monthly';
         const customerId =
@@ -269,19 +302,20 @@ export async function POST(req: Request) {
           .eq('id', subRecord.user_id)
           .maybeSingle();
 
-        // Fetch platform settings for prize pool percent (default 45%)
+        // Fetch platform settings for prize pool percent (default 45%) and min charity percent
         const { data: settings } = await supabase
           .from('platform_settings')
-          .select('prize_pool_percent')
+          .select('prize_pool_percent, min_charity_percent')
           .limit(1)
           .maybeSingle();
 
         const prizePoolPercent = Number(settings?.prize_pool_percent ?? 45);
-        const charityPercent = Number(profile?.charity_percent ?? 10);
+        const minCharityPercent = Number(settings?.min_charity_percent ?? 10);
+        const charityPercent = Number(profile?.charity_percent ?? minCharityPercent);
         const charityId = profile?.charity_id || null;
 
         const poolAmount = Number(((amountPaid * prizePoolPercent) / 100).toFixed(2));
-        const charityAmount = Number(((amountPaid * charityPercent) / 100).toFixed(2));
+        const charityAmount = calculateContributionPounds(amountPaid, charityPercent, minCharityPercent);
         const paidAt = invoice.status_transitions?.paid_at
           ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
           : new Date().toISOString();

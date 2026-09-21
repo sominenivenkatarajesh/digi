@@ -9,6 +9,7 @@ export interface PlatformPricing {
 
 export interface FeaturedCharity {
   id: string;
+  slug?: string;
   name: string;
   tagline: string;
   description: string;
@@ -16,6 +17,7 @@ export interface FeaturedCharity {
   impactMetric: string;
   imageUrl?: string;
   websiteUrl?: string;
+  totalRaised?: number;
 }
 
 export interface PlatformStats {
@@ -59,6 +61,7 @@ export async function getPlatformSettings(): Promise<PlatformPricing> {
 export async function getFeaturedCharity(): Promise<FeaturedCharity> {
   const fallbackCharity: FeaturedCharity = {
     id: 'hero-spotlight-1',
+    slug: 'hope-horizons',
     name: "Hope Horizons Children's Foundation",
     tagline: 'Transforming pediatric healthcare & critical care access',
     description:
@@ -67,6 +70,7 @@ export async function getFeaturedCharity(): Promise<FeaturedCharity> {
     impactMetric:
       '100% of draw contributions directly fund life-saving hospital treatments and family assistance.',
     websiteUrl: 'https://example.org/hope-horizons',
+    totalRaised: 0,
   };
 
   try {
@@ -78,37 +82,48 @@ export async function getFeaturedCharity(): Promise<FeaturedCharity> {
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) {
+    const charityRecord = (!error && data) ? data : null;
+
+    let targetCharity = charityRecord;
+    if (!targetCharity) {
       const { data: firstData } = await supabase
         .from('charities')
         .select('*')
         .limit(1)
         .maybeSingle();
+      targetCharity = firstData || null;
+    }
 
-      if (firstData) {
-        return {
-          id: firstData.id,
-          name: firstData.name || fallbackCharity.name,
-          tagline: firstData.tagline || fallbackCharity.tagline,
-          description: firstData.description || fallbackCharity.description,
-          category: firstData.category || fallbackCharity.category,
-          impactMetric: firstData.impact_metric || fallbackCharity.impactMetric,
-          imageUrl: firstData.image_url || firstData.logo_url,
-          websiteUrl: firstData.website_url,
-        };
-      }
+    if (!targetCharity) {
       return fallbackCharity;
     }
 
+    // Fetch real total raised via get_charity_totals()
+    let realTotalRaised = 0;
+    try {
+      const { data: totalsData } = await supabase.rpc('get_charity_totals');
+      if (totalsData && Array.isArray(totalsData)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row = totalsData.find((t: any) => t.charity_id === targetCharity.id);
+        if (row?.total_raised) {
+          realTotalRaised = Number(row.total_raised);
+        }
+      }
+    } catch {
+      // Ignore RPC error fallback
+    }
+
     return {
-      id: data.id,
-      name: data.name || fallbackCharity.name,
-      tagline: data.tagline || fallbackCharity.tagline,
-      description: data.description || fallbackCharity.description,
-      category: data.category || fallbackCharity.category,
-      impactMetric: data.impact_metric || fallbackCharity.impactMetric,
-      imageUrl: data.image_url || data.logo_url,
-      websiteUrl: data.website_url,
+      id: targetCharity.id,
+      slug: targetCharity.slug || targetCharity.id,
+      name: targetCharity.name || fallbackCharity.name,
+      tagline: targetCharity.tagline || fallbackCharity.tagline,
+      description: targetCharity.description || fallbackCharity.description,
+      category: targetCharity.category || fallbackCharity.category,
+      impactMetric: targetCharity.impact_metric || fallbackCharity.impactMetric,
+      imageUrl: targetCharity.image_url || targetCharity.logo_url,
+      websiteUrl: targetCharity.website_url,
+      totalRaised: realTotalRaised,
     };
   } catch {
     return fallbackCharity;

@@ -49,6 +49,7 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planParam = searchParams.get('plan') === 'yearly' ? 'yearly' : 'monthly';
+  const charityParam = searchParams.get('charity');
 
   const [charities, setCharities] = useState<CharityOption[]>(fallbackCharities);
   const [formData, setFormData] = useState<SignupInput>({
@@ -56,6 +57,7 @@ function SignupForm() {
     email: '',
     password: '',
     charityId: fallbackCharities[0].id,
+    charityPercent: 10,
     planType: planParam,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -69,19 +71,26 @@ function SignupForm() {
         const supabase = createClient();
         const { data, error } = await supabase
           .from('charities')
-          .select('id, name, tagline')
+          .select('id, name, tagline, slug')
           .eq('is_active', true);
 
         if (!error && data && data.length > 0) {
           setCharities(data);
-          setFormData((prev) => ({ ...prev, charityId: data[0].id }));
+          // Check if charityParam matches slug or id
+          const matched = charityParam
+            ? data.find((c: any) => c.id === charityParam || c.slug === charityParam)
+            : null;
+          setFormData((prev) => ({
+            ...prev,
+            charityId: matched ? matched.id : data[0].id,
+          }));
         }
       } catch {
         // Fallbacks remain in place
       }
     }
     loadCharities();
-  }, []);
+  }, [charityParam]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -122,6 +131,7 @@ function SignupForm() {
           data: {
             full_name: formData.fullName,
             charity_id: formData.charityId,
+            charity_percent: formData.charityPercent || 10,
             plan_type: formData.planType,
             role: 'subscriber',
           },
@@ -317,6 +327,43 @@ function SignupForm() {
                 {errors.charityId && (
                   <p className="text-red-400 text-xs mt-1.5">{errors.charityId}</p>
                 )}
+
+                {/* Contribution Percentage Slider */}
+                <div className="mt-4 p-3.5 rounded-xl bg-navy-950/60 border border-white/10">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-slate-300">
+                      Charity Contribution:
+                    </span>
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      {formData.charityPercent || 10}% of fee
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    name="charityPercent"
+                    min="10"
+                    max="100"
+                    step="5"
+                    value={formData.charityPercent || 10}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        charityPercent: parseInt(e.target.value, 10),
+                      }))
+                    }
+                    className="w-full accent-emerald-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                    <span>Min 10%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-2">
+                    {formData.planType === 'yearly'
+                      ? `£${(((formData.charityPercent || 10) / 100) * 99).toFixed(2)} / year directly allocated to your charity.`
+                      : `£${(((formData.charityPercent || 10) / 100) * 10).toFixed(2)} / month directly allocated to your charity.`}
+                  </p>
+                </div>
               </div>
 
               {/* Membership Plan Selection */}

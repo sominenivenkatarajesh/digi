@@ -130,7 +130,7 @@ export function CharityImpactSection() {
                 </p>
 
                 {/* Impact Statement Box */}
-                <div className="p-4 rounded-xl bg-navy-950/60 border border-emerald-500/20 mb-8 flex items-start gap-3">
+                <div className="p-4 rounded-xl bg-navy-950/60 border border-emerald-500/20 mb-6 flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
                   <p className="text-xs sm:text-sm text-emerald-200/90 leading-normal">
                     {charity?.impactMetric ||
@@ -138,22 +138,45 @@ export function CharityImpactSection() {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4">
+                {/* Real Total Raised Counter */}
+                <div className="mb-8 p-4 rounded-xl bg-navy-950/80 border border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] uppercase font-mono tracking-wider text-slate-400 block">
+                      Total Raised for Cause
+                    </span>
+                    <span className="text-xl font-display font-bold text-emerald-400">
+                      {charity?.totalRaised && charity.totalRaised > 0
+                        ? `£${charity.totalRaised.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : 'Be the first to contribute'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Live Impact
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
                   <Button
-                    href="/charities"
-                    variant="primary"
+                    href={`/charities/${charity?.slug || charity?.id || 'hope-horizons'}`}
+                    variant="glow"
                     rightIcon={<ArrowRight className="w-4 h-4" />}
                   >
-                    Browse All Charities
+                    View Charity Profile
+                  </Button>
+                  <Button
+                    href="/charities"
+                    variant="secondary"
+                  >
+                    All Charities
                   </Button>
                   {charity?.websiteUrl && (
                     <a
                       href={charity.websiteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors ml-auto"
                     >
-                      <span>Visit Charity Website</span>
+                      <span>Website</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}

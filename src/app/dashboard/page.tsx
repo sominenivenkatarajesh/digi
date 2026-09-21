@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { ScoresCard } from '@/components/dashboard/ScoresCard';
 import { createClient } from '@/lib/supabase/client';
+import { formatCurrency } from '@/lib/utils';
 import {
   Sparkles,
   Heart,
@@ -21,6 +22,9 @@ import {
   ShieldCheck,
   Lock,
   ExternalLink,
+  Sliders,
+  X,
+  Info,
 } from 'lucide-react';
 
 interface MemberProfile {
@@ -38,17 +42,49 @@ interface SubscriptionDetails {
   renewalDate: string | null;
   cancelAtPeriodEnd: boolean;
   stripeCustomerId: string | null;
-  charityName: string;
-  charityTagline: string;
+}
+
+interface CharityDetails {
+  id: string;
+  name: string;
+  tagline: string;
+  percent: number;
+  isActive: boolean;
+}
+
+interface ActiveCharityOption {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const promptSubscribe = searchParams.get('subscribe') === 'true';
+  const changeCharityParam = searchParams.get('changeCharity');
 
   const [profile, setProfile] = useState<MemberProfile | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionDetails | null>(null);
+  const [charity, setCharity] = useState<CharityDetails>({
+    id: '',
+    name: "Hope Horizons Children's Foundation",
+    tagline: 'Transforming pediatric healthcare & critical care access',
+    percent: 10,
+    isActive: true,
+  });
+  const [totalContributedSoFar, setTotalContributedSoFar] = useState<number>(0);
+  const [activeCharities, setActiveCharities] = useState<ActiveCharityOption[]>([]);
+  const [minPercent, setMinPercent] = useState<number>(10);
+
+  // Charity edit modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCharityId, setSelectedCharityId] = useState('');
+  const [selectedPercent, setSelectedPercent] = useState(10);
+  const [isSavingCharity, setIsSavingCharity] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isBillingLoading, setIsBillingLoading] = useState(false);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
@@ -66,10 +102,10 @@ function DashboardContent() {
           return;
         }
 
-        // Fetch user profile with selected charity
+        // 1. Fetch user profile with selected charity and contribution percent
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('id, full_name, role, charity_id, charities(name, tagline)')
+          .select('id, full_name, role, charity_id, charity_percent, charities(id, name, tagline, is_active, slug)')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -87,18 +123,33 @@ function DashboardContent() {
           role,
         });
 
-        // Fetch subscription row
+        // Parse charity info
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ch = (profileData as any)?.charities;
+        const currentPercent = Number(profileData?.charity_percent || 10);
+        const charityId = profileData?.charity_id || ch?.id || '';
+        const charityName = ch?.name || "Hope Horizons Children's Foundation";
+        const charityTagline =
+          ch?.tagline || 'Transforming pediatric healthcare & critical care access';
+        const isCharityActive = ch ? Boolean(ch.is_active) : true;
+
+        setCharity({
+          id: charityId,
+          name: charityName,
+          tagline: charityTagline,
+          percent: currentPercent,
+          isActive: isCharityActive,
+        });
+
+        setSelectedCharityId(charityId);
+        setSelectedPercent(currentPercent);
+
+        // 2. Fetch subscription row
         const { data: subData } = await supabase
           .from('subscriptions')
           .select('plan, status, current_period_end, cancel_at_period_end, stripe_customer_id')
           .eq('user_id', user.id)
           .maybeSingle();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ch = (profileData as any)?.charities;
-        const charityName = ch?.name || "Hope Horizons Children's Foundation";
-        const charityTagline =
-          ch?.tagline || 'Transforming pediatric healthcare & critical care access';
 
         if (subData) {
           const rawStatus = (subData.status as 'active' | 'inactive' | 'lapsed' | 'cancelled') || 'inactive';
@@ -114,8 +165,6 @@ function DashboardContent() {
             renewalDate: subData.current_period_end || null,
             cancelAtPeriodEnd: Boolean(subData.cancel_at_period_end),
             stripeCustomerId: subData.stripe_customer_id || null,
-            charityName,
-            charityTagline,
           });
         } else {
           setSubscription({
@@ -126,9 +175,47 @@ function DashboardContent() {
             renewalDate: null,
             cancelAtPeriodEnd: false,
             stripeCustomerId: null,
-            charityName,
-            charityTagline,
           });
+        }
+
+        // 3. Fetch user's total contributions to date from payments table
+        const { data: paymentsData } = await supabase
+          .from('payments')
+          .select('charity_amount')
+          .eq('user_id', user.id);
+
+        if (paymentsData && paymentsData.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const totalPaid = paymentsData.reduce((sum: number, p: any) => sum + Number(p.charity_amount || 0), 0);
+          setTotalContributedSoFar(totalPaid);
+        }
+
+        // 4. Fetch active charities list for change dropdown
+        const { data: charitiesList } = await supabase
+          .from('charities')
+          .select('id, name, slug')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+
+        if (charitiesList) {
+          setActiveCharities(charitiesList);
+        }
+
+        // 5. Fetch platform settings for min charity percent
+        const { data: settingsData } = await supabase
+          .from('platform_settings')
+          .select('min_charity_percent')
+          .limit(1)
+          .maybeSingle();
+
+        if (settingsData?.min_charity_percent) {
+          setMinPercent(Number(settingsData.min_charity_percent));
+        }
+
+        // Auto-open modal if changeCharity URL param was passed
+        if (changeCharityParam) {
+          setSelectedCharityId(changeCharityParam);
+          setIsModalOpen(true);
         }
       } catch (err) {
         console.error('Error loading dashboard:', err);
@@ -138,7 +225,7 @@ function DashboardContent() {
     }
 
     loadUserData();
-  }, [router]);
+  }, [router, changeCharityParam]);
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -186,6 +273,60 @@ function DashboardContent() {
       alert('An unexpected error occurred initiating checkout.');
     } finally {
       setIsCheckoutLoading(null);
+    }
+  };
+
+  const handleSaveCharitySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveErrorMsg(null);
+    setSaveSuccessMsg(null);
+
+    if (selectedPercent < minPercent) {
+      setSaveErrorMsg(`Minimum contribution percentage is ${minPercent}%.`);
+      return;
+    }
+    if (selectedPercent > 100) {
+      setSaveErrorMsg('Maximum contribution percentage is 100%.');
+      return;
+    }
+
+    setIsSavingCharity(true);
+    try {
+      const res = await fetch('/api/user/charity', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          charityId: selectedCharityId,
+          charityPercent: selectedPercent,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update charity settings.');
+      }
+
+      const updatedCharityRecord = activeCharities.find((c) => c.id === selectedCharityId);
+      setCharity((prev) => ({
+        ...prev,
+        id: selectedCharityId,
+        name: updatedCharityRecord ? updatedCharityRecord.name : prev.name,
+        percent: selectedPercent,
+        isActive: true,
+      }));
+
+      setSaveSuccessMsg(
+        data.message || 'Preferences saved! Changes will take effect on your next subscription payment.'
+      );
+
+      setTimeout(() => {
+        setIsModalOpen(false);
+        setSaveSuccessMsg(null);
+      }, 1800);
+    } catch (err: any) {
+      setSaveErrorMsg(err.message || 'Failed to save settings.');
+    } finally {
+      setIsSavingCharity(false);
     }
   };
 
@@ -248,38 +389,45 @@ function DashboardContent() {
         year: 'numeric',
       });
     } catch {
-      return null;
+      return dateStr;
     }
   };
 
+  // Plan price calculation for charity split
+  const isYearly = subscription?.plan === 'yearly';
+  const planCost = isYearly ? 99 : 10;
+  const planPeriodText = isYearly ? '/yr' : '/mo';
+  const charityAmountPerCycle = (planCost * (charity.percent / 100)).toFixed(2);
+
   return (
-    <main className="min-h-screen bg-navy-950 text-white pb-24 relative overflow-hidden">
-      {/* Ambient background glows */}
-      <div
-        className="pointer-events-none absolute top-0 right-1/4 w-[600px] h-[500px] bg-emerald-500/10 blur-[130px] rounded-full"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute top-1/3 left-0 w-[500px] h-[400px] bg-gold-400/10 blur-[130px] rounded-full"
-        aria-hidden="true"
-      />
-
-      {/* Top Header */}
-      <header className="border-b border-white/[0.08] bg-navy-900/50 backdrop-blur-xl sticky top-0 z-40">
-        <Container size="wide" className="py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
+    <main className="min-h-screen bg-navy-950 text-white pt-24 pb-20 selection:bg-emerald-500/30 selection:text-emerald-200">
+      <Container>
+        {/* User Welcome Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 mb-8 border-b border-white/[0.08]">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">
+                Welcome, {profile?.full_name}
+              </h1>
+              {subscription?.isAdmin && (
+                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  Staff Admin
+                </span>
+              )}
             </div>
-            <span className="font-display font-bold text-lg text-white">
-              Digital<span className="text-gold-400">Heroes</span>
-            </span>
-          </Link>
+            <p className="text-xs text-slate-400 font-mono">
+              Signed in as {profile?.email}
+            </p>
+          </div>
 
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:inline-block text-xs text-slate-300 font-medium">
-              {profile?.full_name}
-            </span>
+          <div className="flex items-center gap-3">
+            {subscription?.isActive && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-semibold">
+                <Ticket className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Draw Eligible</span>
+              </div>
+            )}
+
             <Button
               variant="secondary"
               size="sm"
@@ -289,64 +437,44 @@ function DashboardContent() {
               Sign Out
             </Button>
           </div>
-        </Container>
-      </header>
+        </div>
 
-      <Container size="wide" className="pt-10 relative z-10">
-        {/* Unlock Banner for Non-Subscribers / Prompted */}
-        {(!subscription?.isActive || promptSubscribe) && !subscription?.isAdmin && (
-          <div className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-gold-500/15 via-amber-500/10 to-transparent border border-gold-400/30 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl shadow-gold-500/5">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gold-400/20 border border-gold-400/40 flex items-center justify-center shrink-0 mt-0.5">
-                <Lock className="w-6 h-6 text-gold-400" />
-              </div>
+        {/* Subscribe Banner if prompted */}
+        {promptSubscribe && !subscription?.isActive && (
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <h2 className="text-lg font-display font-bold text-white mb-1">
-                  Subscribe to Unlock Stableford Scores & Monthly Cash Draws
-                </h2>
-                <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                  You are signed in, but your account does not have an active subscription. Subscribe to a Monthly (£10) or Annual (£99) membership to record your 5 golf scores and qualify for the monthly cash prize pool.
+                <h2 className="text-sm font-bold text-white">Unlock Golf Score Tracking & Monthly Draws</h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Your registration is complete! Choose a plan below to activate your account and start entering golf scores.
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0">
               <Button
                 variant="glow"
-                size="md"
+                size="sm"
                 isLoading={isCheckoutLoading === 'monthly'}
                 onClick={() => handleStartCheckout('monthly')}
-                rightIcon={<ArrowRight className="w-4 h-4" />}
               >
-                Subscribe Monthly (£10)
+                Monthly (£10/mo)
               </Button>
               <Button
-                variant="secondary"
-                size="md"
+                variant="primary"
+                size="sm"
                 isLoading={isCheckoutLoading === 'yearly'}
                 onClick={() => handleStartCheckout('yearly')}
               >
-                Annual (£99)
+                Yearly (£99/yr)
               </Button>
             </div>
           </div>
         )}
 
-        {/* Welcome Header */}
-        <div className="mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-white/5 border border-white/10 text-slate-300 mb-3">
-            {subscription?.isActive ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            ) : (
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-            )}
-            <span>
-              {subscription?.isActive ? 'Active Subscriber Account' : 'Inactive Subscription'}
-            </span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-display font-extrabold text-white">
-            Hello, {profile?.full_name}
-          </h1>
+        {/* Membership Status Overview */}
+        <div className="mb-6">
+          <h2 className="text-lg font-display font-bold text-white">Membership Overview</h2>
           <p className="text-slate-400 text-sm mt-1">
             {subscription?.isActive
               ? 'Your active subscription fuels direct charity aid and guarantees entry into every monthly draw.'
@@ -433,23 +561,67 @@ function DashboardContent() {
           {/* Card 2: Chosen Charity Cause */}
           <GlassCard glowColor="gold" className="p-6 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <span className="text-xs uppercase font-semibold text-slate-400 tracking-wider">
                   Supported Charity
                 </span>
                 <Heart className="w-4 h-4 text-gold-400 fill-gold-400/20" />
               </div>
+
+              {/* Deactivated Notice */}
+              {!charity.isActive && (
+                <div className="mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Your chosen charity is currently inactive. Please choose an active charity to resume contributions.
+                  </span>
+                </div>
+              )}
+
               <div className="text-lg font-display font-bold text-white mb-1 line-clamp-1">
-                {subscription?.charityName}
+                {charity.name}
               </div>
-              <p className="text-xs text-slate-400 line-clamp-2">
-                {subscription?.charityTagline}
+              <p className="text-xs text-slate-400 line-clamp-2 mb-4">
+                {charity.tagline}
               </p>
+
+              {/* Current Split Stats */}
+              <div className="p-3 rounded-xl bg-navy-950/60 border border-white/5 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Contribution Split:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {charity.percent}% of fee
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Dedicated per cycle:</span>
+                  <span className="font-bold text-white">
+                    £{charityAmountPerCycle} {planPeriodText}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                  <span className="text-slate-400">Your total impact so far:</span>
+                  <span className="font-bold text-emerald-300">
+                    {totalContributedSoFar > 0 ? formatCurrency(totalContributedSoFar, '£') : '£0.00'}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-white/[0.08] text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>Direct allocations per paid invoice</span>
+            <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSelectedCharityId(charity.id);
+                  setSelectedPercent(charity.percent);
+                  setIsModalOpen(true);
+                }}
+                className="w-full justify-center text-xs"
+                leftIcon={<Sliders className="w-3.5 h-3.5 text-gold-400" />}
+              >
+                Change Charity or %
+              </Button>
             </div>
           </GlassCard>
 
@@ -486,6 +658,150 @@ function DashboardContent() {
           isAdmin={subscription?.isAdmin || false}
         />
       </Container>
+
+      {/* Charity Settings Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-lg">
+            <GlassCard glowColor="gold" className="p-6 sm:p-8 relative border-white/20">
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-2">
+                <Heart className="w-5 h-5 text-gold-400" />
+                <h3 className="text-xl font-display font-bold text-white">
+                  Update Charity Settings
+                </h3>
+              </div>
+              <p className="text-xs text-slate-300 mb-6">
+                Direct a higher percentage of your membership fee to any vetted UK charity.
+              </p>
+
+              {saveErrorMsg && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{saveErrorMsg}</span>
+                </div>
+              )}
+
+              {saveSuccessMsg && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{saveSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCharitySettings} className="space-y-6">
+                {/* Select Charity */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                    Choose Supported Charity
+                  </label>
+                  <select
+                    value={selectedCharityId}
+                    onChange={(e) => setSelectedCharityId(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 rounded-xl bg-navy-900 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 cursor-pointer"
+                  >
+                    {activeCharities.map((c) => (
+                      <option key={c.id} value={c.id} className="bg-navy-900 text-white">
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Percentage Slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      Charity Contribution Split
+                    </label>
+                    <span className="text-sm font-mono font-bold text-gold-400 bg-gold-400/10 px-2.5 py-0.5 rounded border border-gold-400/20">
+                      {selectedPercent}% of fee
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={minPercent}
+                    max={100}
+                    step={5}
+                    value={selectedPercent}
+                    onChange={(e) => setSelectedPercent(parseInt(e.target.value, 10))}
+                    className="w-full accent-gold-400 cursor-pointer"
+                  />
+
+                  {/* Preset Percent Pills */}
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    {[10, 25, 50, 100].map((pct) => (
+                      <button
+                        type="button"
+                        key={pct}
+                        onClick={() => setSelectedPercent(pct)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                          selectedPercent === pct
+                            ? 'bg-gold-400 text-navy-950 shadow-md'
+                            : 'bg-navy-950/60 border border-white/10 text-slate-300 hover:border-white/20'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Live Calculation Preview */}
+                  <div className="mt-4 p-3.5 rounded-xl bg-navy-950/80 border border-white/5 space-y-1">
+                    <div className="text-xs text-slate-300">
+                      At <strong className="text-gold-300">{selectedPercent}%</strong>,{' '}
+                      <strong className="text-emerald-400">
+                        £{((planCost * selectedPercent) / 100).toFixed(2)} {planPeriodText}
+                      </strong>{' '}
+                      of your {subscription?.plan || 'monthly'} fee will go directly to charity.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Important Timing Notice */}
+                <div className="p-3 rounded-xl bg-navy-950/60 border border-white/10 text-[11px] text-slate-400 flex items-start gap-2">
+                  <Info className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Note:</strong> Changes apply from your <em>next</em> subscription payment.
+                    Past payments maintain their original charity allocation.
+                  </span>
+                </div>
+
+                {/* Submit & Cancel */}
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsModalOpen(false)}
+                    disabled={isSavingCharity}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="glow"
+                    size="sm"
+                    isLoading={isSavingCharity}
+                  >
+                    Save Preferences
+                  </Button>
+                </div>
+              </form>
+            </GlassCard>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -503,4 +819,3 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
-
