@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { createClient } from '@/lib/supabase/client';
 import {
   ShieldAlert,
@@ -244,6 +245,11 @@ export default function AdminDrawsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/admin/winners">
+              <Button variant="primary" size="sm" leftIcon={<Award className="w-3.5 h-3.5" />}>
+                Winner Verification
+              </Button>
+            </Link>
             <Link href="/dashboard">
               <Button variant="secondary" size="sm">
                 User Dashboard
@@ -575,54 +581,105 @@ export default function AdminDrawsPage() {
               </p>
             </GlassCard>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-800">
-                  <tr>
-                    <th className="py-3 px-4">Month</th>
-                    <th className="py-3 px-4">Winning Numbers</th>
-                    <th className="py-3 px-4">Mode</th>
-                    <th className="py-3 px-4">Total Pool</th>
-                    <th className="py-3 px-4">Rolled Over</th>
-                    <th className="py-3 px-4">Published At</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {publishedDraws.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-900/40 transition">
-                      <td className="py-3 px-4 font-bold text-white">{d.draw_month}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5">
-                          {d.winning_numbers?.map((n, i) => (
-                            <span
-                              key={i}
-                              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[11px] border border-amber-500/40"
-                            >
-                              {n}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 capitalize font-sans">{d.mode}</td>
-                      <td className="py-3 px-4 text-emerald-400">£{Number(d.pool_total || 0).toFixed(2)}</td>
-                      <td className="py-3 px-4 text-amber-400">
-                        {Number(d.jackpot_rolled_over || 0) > 0
-                          ? `£${Number(d.jackpot_rolled_over).toFixed(2)}`
-                          : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-slate-400 font-sans">
-                        {d.published_at ? new Date(d.published_at).toLocaleString() : '—'}
-                      </td>
-                      <td className="py-3 px-4 font-sans">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                          {d.status}
+            <div className="space-y-4">
+              {/* Mobile Stacked Cards (< 768px) */}
+              <div className="md:hidden space-y-3">
+                {publishedDraws.map((d) => (
+                  <GlassCard key={d.id} className="p-4 border-white/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-sm">{d.draw_month}</span>
+                      <StatusBadge status="verified" size="xs" label={d.status || 'Published'} />
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
+                        Winning Numbers:
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {d.winning_numbers?.map((n, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40"
+                          >
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-white/5">
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase block">Total Pool</span>
+                        <span className="text-emerald-400 font-bold font-mono">
+                          £{Number(d.pool_total || 0).toFixed(2)}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase block">Rolled Over</span>
+                        <span className="text-amber-400 font-bold font-mono">
+                          {Number(d.jackpot_rolled_over || 0) > 0 ? `£${Number(d.jackpot_rolled_over).toFixed(2)}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center justify-between pt-1">
+                      <span className="capitalize">Mode: {d.mode}</span>
+                      <span>{d.published_at ? new Date(d.published_at).toLocaleDateString('en-GB') : '—'}</span>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+
+              {/* Desktop Table with Horizontal Scroll (>= 768px) */}
+              <GlassCard className="hidden md:block overflow-hidden border border-white/10">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-800">
+                      <tr>
+                        <th className="py-3 px-4">Month</th>
+                        <th className="py-3 px-4">Winning Numbers</th>
+                        <th className="py-3 px-4">Mode</th>
+                        <th className="py-3 px-4">Total Pool</th>
+                        <th className="py-3 px-4">Rolled Over</th>
+                        <th className="py-3 px-4">Published At</th>
+                        <th className="py-3 px-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {publishedDraws.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-900/40 transition">
+                          <td className="py-3 px-4 font-bold text-white">{d.draw_month}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5">
+                              {d.winning_numbers?.map((n, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[11px] border border-amber-500/40"
+                                >
+                                  {n}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 capitalize font-sans">{d.mode}</td>
+                          <td className="py-3 px-4 text-emerald-400">£{Number(d.pool_total || 0).toFixed(2)}</td>
+                          <td className="py-3 px-4 text-amber-400">
+                            {Number(d.jackpot_rolled_over || 0) > 0
+                              ? `£${Number(d.jackpot_rolled_over).toFixed(2)}`
+                              : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-slate-400 font-sans">
+                            {d.published_at ? new Date(d.published_at).toLocaleString() : '—'}
+                          </td>
+                          <td className="py-3 px-4 font-sans">
+                            <StatusBadge status="verified" size="xs" label={d.status || 'Published'} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
             </div>
           )}
         </div>

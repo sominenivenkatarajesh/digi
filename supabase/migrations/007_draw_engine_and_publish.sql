@@ -1,5 +1,5 @@
 -- Migration 007: Draw Engine, Simulation Storage, and Atomic Publish
--- PRD Section 06 & 07: Draw and Reward System & Prize Pool Management
+-- Official monthly prize draws, weighted probability engine, and atomic publish transaction
 
 -- 1. Ensure columns on public.draws
 ALTER TABLE public.draws ADD COLUMN IF NOT EXISTS draw_month DATE NOT NULL DEFAULT CURRENT_DATE;

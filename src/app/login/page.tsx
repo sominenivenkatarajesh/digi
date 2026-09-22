@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { createClient } from '@/lib/supabase/client';
 import { loginSchema, LoginInput } from '@/lib/validations/auth';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
 import { Sparkles, Mail, Lock, AlertCircle, ArrowRight, LogIn } from 'lucide-react';
 
 function LoginForm() {
@@ -187,6 +188,11 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="min-h-screen bg-navy-950 text-white flex flex-col justify-center items-center py-20 px-4 relative overflow-hidden">
+      {/* Top right currency option */}
+      <div className="absolute top-6 right-6 z-20">
+        <CurrencySelector size="sm" />
+      </div>
+
       {/* Ambient background glow */}
       <div
         className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[450px] bg-gradient-to-br from-emerald-500/10 via-gold-500/5 to-transparent blur-[120px] rounded-full"

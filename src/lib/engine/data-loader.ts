@@ -7,7 +7,7 @@ const PAGE_SIZE = 1000;
 /**
  * Loads all eligible users and their 5 latest scores using paginated queries.
  *
- * Pagination Guarantee (PRD / Phase 5 Audit Rule 5):
+ * Pagination Guarantee:
  * Supabase/PostgREST enforces a default 1,000-row limit per query.
  * This loader paginates through subscriptions and scores using `.range(offset, offset + PAGE_SIZE - 1)`
  * in a loop until all records are consumed, ensuring zero users are silently dropped.

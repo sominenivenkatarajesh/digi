@@ -9,7 +9,7 @@ import {
 /**
  * Calculates the total modeled prize pool in integer pence based on eligible subscribers.
  *
- * PRD Rule & Assumption:
+ * Prize pool calculation:
  * This pool is modeled based on the active subscriber count:
  * - Monthly plans contribute: monthlyPricePence
  * - Yearly plans contribute: Math.round(yearlyPricePence / 12) (monthly equivalent)
@@ -39,7 +39,7 @@ export function calculatePool(
 }
 
 /**
- * Splits the base pool into the 3 tiers according to PRD ratios:
+ * Splits the base pool into the 3 tiers according to configured tier ratios:
  * - 5-match: 40% of base pool + any carried-in jackpot
  * - 4-match: 35% of base pool
  * - 3-match: 25% of base pool + any rounding remainder pence

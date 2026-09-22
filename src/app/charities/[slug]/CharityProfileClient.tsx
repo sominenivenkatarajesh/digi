@@ -7,6 +7,8 @@ import { Container } from '@/components/ui/Container';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/utils';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
+import { useCurrency } from '@/components/providers/CurrencyProvider';
 import {
   Heart,
   Calendar,
@@ -63,6 +65,7 @@ export function CharityProfileClient({
   initialDonate = false,
 }: CharityProfileClientProps) {
   const router = useRouter();
+  const { symbol, format: formatPrice } = useCurrency();
   const [donationAmount, setDonationAmount] = useState<number | ''>(25);
   const [customInput, setCustomInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -151,8 +154,8 @@ export function CharityProfileClient({
       </div>
 
       <Container className="relative z-10 pt-28 sm:pt-32">
-        {/* Back Link */}
-        <div className="mb-6">
+        {/* Back Link & Currency Selector */}
+        <div className="flex items-center justify-between gap-4 mb-6">
           <Link
             href="/charities"
             className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-emerald-400 transition-colors group"
@@ -160,6 +163,7 @@ export function CharityProfileClient({
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
             <span>Back to All Charities</span>
           </Link>
+          <CurrencySelector size="sm" />
         </div>
 
         {/* Hero Section */}
@@ -231,7 +235,7 @@ export function CharityProfileClient({
                   Total Raised
                 </div>
                 <div className="text-3xl sm:text-4xl font-display font-bold text-emerald-400 mb-2">
-                  {totalRaised > 0 ? formatCurrency(totalRaised, '£') : '£0.00'}
+                  {totalRaised > 0 ? formatPrice(totalRaised) : `${symbol}0.00`}
                 </div>
                 <p className="text-xs text-slate-400 mb-4">
                   {totalRaised > 0
@@ -371,7 +375,7 @@ export function CharityProfileClient({
                             : 'bg-navy-950/60 border border-white/10 text-slate-200 hover:border-white/25 hover:text-white'
                         }`}
                       >
-                        £{amt}
+                        {symbol}{amt}
                       </button>
                     ))}
                   </div>
@@ -379,7 +383,7 @@ export function CharityProfileClient({
                   {/* Custom Amount Input */}
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
-                      £
+                      {symbol}
                     </span>
                     <input
                       type="number"
@@ -420,7 +424,7 @@ export function CharityProfileClient({
                 >
                   {isSubmitting
                     ? 'Redirecting to Stripe...'
-                    : `Donate ${donationAmount ? formatCurrency(Number(donationAmount), '£') : 'Now'}`}
+                    : `Donate ${donationAmount ? formatPrice(Number(donationAmount)) : 'Now'}`}
                 </Button>
               </form>
             </GlassCard>

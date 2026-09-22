@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateContribution, poundsToPence, penceToPounds } from '../calculate';
 
-describe('Donation & Contribution Business Rules (Phase 4)', () => {
+describe('Donation & Contribution Business Rules', () => {
   describe('Contribution calculations', () => {
     it('calculates exact 10% on £10 plan as 100p (£1.00)', () => {
       const pence = calculateContribution(1000, 10);

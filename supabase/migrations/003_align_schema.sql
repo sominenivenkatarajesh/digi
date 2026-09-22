@@ -1,4 +1,4 @@
--- Migration 003: Align Schema with PRD
+-- Migration 003: Core Platform Schema Alignment
 -- Aligns profiles, subscriptions, platform_settings and creates scores, charity_events,
 -- payments, draws, draw_simulations, draw_entries, winners, donations, triggers & storage.
 

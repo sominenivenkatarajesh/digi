@@ -1,4 +1,4 @@
--- Phase 1 Migration: Initial Database Schema
+-- Migration 001: Initial Database Schema
 -- Digital Heroes: Profiles, Charities, Subscriptions, Platform Settings, RLS & Triggers
 
 -- 1. Create Profiles Table (links to auth.users)

@@ -8,6 +8,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency } from '@/lib/utils';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
+import { useCurrency } from '@/components/providers/CurrencyProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -36,6 +38,7 @@ interface CharityItem {
 function CharitiesDirectoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { format: formatPrice } = useCurrency();
 
   const initialCategory = searchParams.get('category') || 'All Causes';
   const initialQuery = searchParams.get('q') || '';
@@ -190,9 +193,12 @@ function CharitiesDirectoryContent() {
           >
             ← Back to Homepage
           </Link>
-          <span className="text-xs text-slate-400 font-mono">
-            {charities.length} Active Partner{charities.length === 1 ? '' : 's'}
-          </span>
+          <div className="flex items-center gap-3">
+            <CurrencySelector size="sm" />
+            <span className="text-xs text-slate-400 font-mono">
+              {charities.length} Active Partner{charities.length === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
         {/* Section Heading (No invented claims) */}
@@ -350,7 +356,7 @@ function CharitiesDirectoryContent() {
                           <span className="text-[11px] text-slate-400">Total Raised:</span>
                           <span className="font-display font-bold text-emerald-400 text-sm">
                             {totalRaised > 0
-                              ? formatCurrency(totalRaised, '£')
+                              ? formatPrice(totalRaised)
                               : 'Be the first to join'}
                           </span>
                         </div>

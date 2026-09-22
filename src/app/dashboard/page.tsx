@@ -7,11 +7,13 @@ import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { ScoresCard } from '@/components/dashboard/ScoresCard';
+import { WinningsCard, UserWinning } from '@/components/dashboard/WinningsCard';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency } from '@/lib/utils';
 import { calculateContribution, poundsToPence, penceToPounds } from '@/lib/charity/calculate';
 import { useCurrency } from '@/components/providers/CurrencyProvider';
 import { CurrencySelector } from '@/components/ui/CurrencySelector';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import {
   Sparkles,
   Heart,
@@ -106,7 +108,7 @@ function DashboardContent() {
   const [isBillingLoading, setIsBillingLoading] = useState(false);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
 
-  // Phase 5: Latest Published Draw State
+  // Latest Published Draw State
   const [latestDrawInfo, setLatestDrawInfo] = useState<{
     draw: {
       id: string;
@@ -135,157 +137,68 @@ function DashboardContent() {
     } | null;
   } | null>(null);
 
+  // Winnings & Participation Summary State
+  const [userWinnings, setUserWinnings] = useState<UserWinning[]>([]);
+  const [winningsSummary, setWinningsSummary] = useState<{
+    totalWon: number;
+    totalPaid: number;
+    totalPending: number;
+    count: number;
+  } | null>(null);
+  const [winningsNotifications, setWinningsNotifications] = useState<{
+    actionRequiredCount: number;
+    approvedPendingPayoutCount: number;
+    paidCount: number;
+  } | null>(null);
+  const [participation, setParticipation] = useState<{
+    drawsEnteredCount: number;
+    nextDrawMonth: string;
+    isEligibleForNextDraw: boolean;
+    eligibilityReason: string;
+  } | null>(null);
+
+  const loadUserWinnings = async () => {
+    try {
+      const res = await fetch('/api/dashboard/summary');
+      if (res.ok) {
+        const data = await res.json();
+        setUserWinnings(data.winnings || []);
+        setWinningsSummary(data.winningsSummary || null);
+        setWinningsNotifications(data.notifications || null);
+      }
+    } catch (e) {
+      console.error('Failed to reload winnings:', e);
+    }
+  };
+
   useEffect(() => {
     async function loadUserData() {
       try {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          router.push('/login?next=/dashboard');
-          return;
-        }
-
-        // 1. Fetch user profile with selected charity and contribution percent
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, full_name, role, charity_id, charity_percent, charities(id, name, tagline, is_active, slug)')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        const role = profileData?.role || user.user_metadata?.role || 'subscriber';
-        const isAdmin = role === 'admin';
-
-        setProfile({
-          id: user.id,
-          email: user.email || '',
-          full_name:
-            profileData?.full_name ||
-            user.user_metadata?.full_name ||
-            user.email?.split('@')[0] ||
-            'Hero Member',
-          role,
-        });
-
-        // Parse charity info
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ch = (profileData as any)?.charities;
-        const currentPercent = Number(profileData?.charity_percent || 10);
-        const charityId = profileData?.charity_id || ch?.id || '';
-        const charityName = ch?.name || "Hope Horizons Children's Foundation";
-        const charityTagline =
-          ch?.tagline || 'Transforming pediatric healthcare & critical care access';
-        const isCharityActive = ch ? Boolean(ch.is_active) : true;
-
-        setCharity({
-          id: charityId,
-          name: charityName,
-          tagline: charityTagline,
-          percent: currentPercent,
-          isActive: isCharityActive,
-        });
-
-        setSelectedCharityId(charityId);
-        setSelectedPercent(currentPercent);
-
-        // 2. Fetch subscription row
-        const { data: subData } = await supabase
-          .from('subscriptions')
-          .select('plan, status, current_period_end, cancel_at_period_end, stripe_customer_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (subData) {
-          const rawStatus = (subData.status as 'active' | 'inactive' | 'lapsed' | 'cancelled') || 'inactive';
-          const periodEnd = subData.current_period_end ? new Date(subData.current_period_end) : null;
-          const isPeriodValid = periodEnd ? periodEnd.getTime() > Date.now() : true;
-          const isActive = isAdmin || (rawStatus === 'active' && isPeriodValid);
-
-          setSubscription({
-            plan: (subData.plan as 'monthly' | 'yearly') || 'monthly',
-            status: rawStatus,
-            isActive,
-            isAdmin,
-            renewalDate: subData.current_period_end || null,
-            cancelAtPeriodEnd: Boolean(subData.cancel_at_period_end),
-            stripeCustomerId: subData.stripe_customer_id || null,
-          });
-        } else {
-          setSubscription({
-            plan: 'monthly',
-            status: 'inactive',
-            isActive: isAdmin,
-            isAdmin,
-            renewalDate: null,
-            cancelAtPeriodEnd: false,
-            stripeCustomerId: null,
-          });
-        }
-
-        // 3. Fetch user's total contributions to date from payments table
-        const { data: paymentsData } = await supabase
-          .from('payments')
-          .select('charity_amount')
-          .eq('user_id', user.id);
-
-        if (paymentsData && paymentsData.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const totalPaid = paymentsData.reduce((sum: number, p: any) => sum + Number(p.charity_amount || 0), 0);
-          setTotalContributedSoFar(totalPaid);
-        }
-
-        // 3b. Fetch user's latest 5 Stableford scores for the Draw Ticket
-        const { data: scoresData } = await supabase
-          .from('scores')
-          .select('id, score, played_on')
-          .eq('user_id', user.id)
-          .order('played_on', { ascending: false })
-          .limit(5);
-
-        if (scoresData) {
-          setUserScores(scoresData);
-        }
-
-        // 4. Fetch active charities list for change dropdown
-        const { data: charitiesList } = await supabase
-          .from('charities')
-          .select('id, name, slug')
-          .eq('is_active', true)
-          .order('name', { ascending: true });
-
-        if (charitiesList) {
-          setActiveCharities(charitiesList);
-        }
-
-        // 5. Fetch platform settings for pricing and min charity percent
-        const { data: settingsData } = await supabase
-          .from('platform_settings')
-          .select('min_charity_percent, monthly_price, yearly_price, monthly_subscription_price, annual_subscription_price')
-          .limit(1)
-          .maybeSingle();
-
-        if (settingsData) {
-          if (settingsData.min_charity_percent) {
-            setMinPercent(Number(settingsData.min_charity_percent));
+        const res = await fetch('/api/dashboard/summary');
+        if (!res.ok) {
+          if (res.status === 401) {
+            router.push('/login?next=/dashboard');
+            return;
           }
-          const mPrice = Number(settingsData.monthly_price ?? settingsData.monthly_subscription_price ?? 10);
-          const yPrice = Number(settingsData.yearly_price ?? settingsData.annual_subscription_price ?? 99);
-          setMonthlyPrice(mPrice);
-          setYearlyPrice(yPrice);
+          throw new Error('Failed to load dashboard summary');
         }
 
-        // 6. Fetch latest published draw and user entry
-        try {
-          const drawRes = await fetch('/api/draws/latest');
-          if (drawRes.ok) {
-            const drawData = await drawRes.json();
-            setLatestDrawInfo(drawData);
-          }
-        } catch (e) {
-          console.error('Failed to load latest draw:', e);
-        }
+        const data = await res.json();
+        setProfile(data.profile);
+        setSubscription(data.subscription);
+        setCharity(data.charity);
+        setSelectedCharityId(data.charity?.id || '');
+        setSelectedPercent(data.charity?.percent || 10);
+        setActiveCharities(data.activeCharities || []);
+        setMinPercent(data.pricing?.minPercent || 10);
+        setMonthlyPrice(data.pricing?.monthlyPrice || 10);
+        setYearlyPrice(data.pricing?.yearlyPrice || 99);
+        setUserScores(data.scores || []);
+        setParticipation(data.participation || null);
+        setUserWinnings(data.winnings || []);
+        setWinningsSummary(data.winningsSummary || null);
+        setWinningsNotifications(data.notifications || null);
+        setLatestDrawInfo(data.latestDrawInfo || null);
 
         // Auto-open modal if changeCharity URL param was passed
         if (changeCharityParam) {
@@ -293,7 +206,7 @@ function DashboardContent() {
           setIsModalOpen(true);
         }
       } catch (err) {
-        console.error('Error loading dashboard:', err);
+        console.error('Error loading dashboard summary:', err);
       } finally {
         setIsLoading(false);
       }
@@ -407,11 +320,38 @@ function DashboardContent() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-navy-950 text-white flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Loading your hero dashboard...</p>
-        </div>
+      <main className="min-h-screen bg-navy-950 text-white pt-24 pb-20">
+        <Container>
+          {/* Header skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 mb-8 border-b border-white/[0.08] animate-pulse">
+            <div className="space-y-2">
+              <div className="h-8 w-48 bg-white/10 rounded-xl" />
+              <div className="h-4 w-32 bg-white/5 rounded-lg" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-9 w-24 bg-white/10 rounded-xl" />
+              <div className="h-9 w-24 bg-white/10 rounded-xl" />
+            </div>
+          </div>
+
+          {/* 3 cards skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-64 rounded-2xl bg-white/[0.03] border border-white/5 p-6 animate-pulse space-y-4">
+                <div className="h-4 w-28 bg-white/10 rounded" />
+                <div className="h-8 w-40 bg-white/15 rounded-lg" />
+                <div className="h-12 w-full bg-white/5 rounded-xl" />
+                <div className="h-9 w-full bg-white/10 rounded-xl mt-auto" />
+              </div>
+            ))}
+          </div>
+
+          {/* Large section skeleton */}
+          <div className="h-72 rounded-2xl bg-white/[0.03] border border-white/5 p-6 animate-pulse mb-8 space-y-4">
+            <div className="h-5 w-44 bg-white/10 rounded" />
+            <div className="h-24 w-full bg-white/5 rounded-xl" />
+          </div>
+        </Container>
       </main>
     );
   }
@@ -419,39 +359,9 @@ function DashboardContent() {
   const getStatusBadge = () => {
     if (!subscription) return null;
     if (subscription.isAdmin) {
-      return (
-        <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
-          Admin Bypass
-        </span>
-      );
+      return <StatusBadge status="admin_bypass" size="sm" />;
     }
-
-    switch (subscription.status) {
-      case 'active':
-        return (
-          <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            Active
-          </span>
-        );
-      case 'lapsed':
-        return (
-          <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
-            Payment Lapsed
-          </span>
-        );
-      case 'cancelled':
-        return (
-          <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
-            Cancelled
-          </span>
-        );
-      default:
-        return (
-          <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-slate-500/15 text-slate-400 border border-slate-500/30">
-            Inactive
-          </span>
-        );
-    }
+    return <StatusBadge status={subscription.status} size="sm" />;
   };
 
   const formatRenewalDate = (dateStr: string | null) => {
@@ -517,15 +427,17 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* Subscribe Banner if prompted */}
-        {promptSubscribe && !subscription?.isActive && (
-          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        {/* Subscribe Banner if prompted or inactive */}
+        {(!subscription?.isActive || promptSubscribe) && (
+          <div className="mb-8 p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+              </div>
               <div>
-                <h2 className="text-sm font-bold text-white">Unlock Golf Score Tracking & Monthly Draws</h2>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Your registration is complete! Choose a plan below to activate your account and start entering golf scores.
+                <h2 className="text-base font-bold text-white">Welcome to Digital Heroes!</h2>
+                <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                  Start your charity golf journey: activate a monthly or yearly membership to support vetted charities, record your 5 latest Stableford scores, and automatically enter official cash draws every month.
                 </p>
               </div>
             </div>
@@ -546,6 +458,71 @@ function DashboardContent() {
               >
                 Yearly ({formatPrice(yearlyPrice)}/yr)
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Fresh user empty state: 0 scores reminder */}
+        {subscription?.isActive && userScores.length === 0 && (
+          <div className="mb-8 p-5 rounded-2xl bg-gradient-to-r from-gold-500/15 via-amber-500/10 to-transparent border border-gold-500/30 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Compass className="w-6 h-6 text-gold-400 shrink-0" />
+              <div>
+                <h3 className="text-sm font-bold text-white">No Golf Scores Added Yet</h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  You need 5 valid Stableford scores (1–45) to enter the upcoming monthly draw. Add your first score below!
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const el = document.getElementById('scores-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs shrink-0"
+            >
+              Add Scores
+            </Button>
+          </div>
+        )}
+
+        {/* Winnings Action / Status Notification Banners */}
+        {winningsNotifications && winningsNotifications.actionRequiredCount > 0 && (
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-rose-500/15 to-transparent border border-amber-500/40 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  Action Required: Submit Score Proof
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300">
+                    {winningsNotifications.actionRequiredCount} Action{winningsNotifications.actionRequiredCount > 1 ? 's' : ''} Needed
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-1">
+                  Congratulations on your draw win! Please upload screenshot proof of your golf scores below to verify your round and unlock your payout.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {winningsNotifications && winningsNotifications.actionRequiredCount === 0 && winningsNotifications.approvedPendingPayoutCount > 0 && (
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-transparent border border-emerald-500/35 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  Score Proof Verified & Approved!
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300">
+                    {winningsNotifications.approvedPendingPayoutCount} Prize{winningsNotifications.approvedPendingPayoutCount > 1 ? 's' : ''} Approved
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-1">
+                  Your submitted golf score proofs have been verified by the administrator. Your cash prize payout is pending manual transfer.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -711,32 +688,39 @@ function DashboardContent() {
             </div>
           </GlassCard>
 
-          {/* Card 3: Upcoming Draw */}
+          {/* Card 3: Participation Summary */}
           <GlassCard glowColor="default" className="p-6 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-xs uppercase font-semibold text-slate-400 tracking-wider">
-                  Upcoming Draw
+                  Participation Summary
                 </span>
                 <Calendar className="w-4 h-4 text-slate-400" />
               </div>
               <div className="text-2xl font-display font-bold text-white mb-1">
-                1st of Next Month
+                {participation?.drawsEnteredCount ?? 0} {participation?.drawsEnteredCount === 1 ? 'Draw' : 'Draws'} Entered
               </div>
               <p className="text-xs text-slate-400">
-                Official 5-number draw at 00:00:00 UTC.
+                Next draw scheduled for{' '}
+                <strong className="text-white">
+                  {participation?.nextDrawMonth
+                    ? new Date(participation.nextDrawMonth).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+                    : '1st of Next Month'}
+                </strong>.
               </p>
               <div className="mt-3 p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-xs">
-                <span className="text-slate-400">Estimated Cash Prize Pool: </span>
-                <strong className="text-gold-300 font-mono">{formatPrice(45000)}</strong>
+                <span className="text-slate-400">Eligibility Status: </span>
+                <span className={participation?.isEligibleForNextDraw ? 'text-emerald-300 font-semibold' : 'text-amber-300 font-semibold'}>
+                  {participation?.eligibilityReason || (subscription?.isActive ? 'Eligible' : 'Subscription required')}
+                </span>
               </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/[0.08] text-xs text-slate-300 flex items-center justify-between">
-              {subscription?.isActive ? (
+              {participation?.isEligibleForNextDraw ? (
                 <span className="text-emerald-400 font-medium">✓ Qualified for next draw</span>
               ) : (
-                <span className="text-amber-400 font-medium">Subscribe to qualify</span>
+                <span className="text-amber-400 font-medium">Needs 5 scores & active sub</span>
               )}
               <span className="text-[11px] text-slate-400">45% Pool Split</span>
             </div>
@@ -744,12 +728,23 @@ function DashboardContent() {
         </div>
 
         {/* Stableford Scores Card */}
-        <ScoresCard
-          isActiveSubscription={subscription?.isActive || false}
-          isAdmin={subscription?.isAdmin || false}
-        />
+        <div id="scores-section">
+          <ScoresCard
+            isActiveSubscription={subscription?.isActive || false}
+            isAdmin={subscription?.isAdmin || false}
+          />
+        </div>
 
-        {/* SECTION 3A: Latest Official Draw (Phase 5) */}
+        {/* Your Winnings & Verification */}
+        {profile?.id && (
+          <WinningsCard
+            winnings={userWinnings}
+            userId={profile.id}
+            onRefresh={loadUserWinnings}
+          />
+        )}
+
+        {/* Latest Official Draw */}
         {latestDrawInfo?.draw && (
           <div className="mt-12 mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
@@ -1344,9 +1339,9 @@ function DashboardContent() {
                     <div className="text-xs text-slate-300">
                       At <strong className="text-gold-300">{selectedPercent}%</strong>,{' '}
                       <strong className="text-emerald-400">
-                        £{(calculateContribution(poundsToPence(planCost), selectedPercent, minPercent) / 100).toFixed(2)} {planPeriodText}
+                        {formatPrice(calculateContribution(poundsToPence(planCost), selectedPercent, minPercent) / 100)} {planPeriodText}
                       </strong>{' '}
-                      of your {subscription?.plan || 'monthly'} fee (£{planCost.toFixed(2)}) will go directly to charity.
+                      of your {subscription?.plan || 'monthly'} fee ({formatPrice(planCost)}) will go directly to charity.
                     </div>
                   </div>
                 </div>

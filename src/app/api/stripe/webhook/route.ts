@@ -103,7 +103,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ received: true, type: 'donation' });
         }
 
-        // Branch 2: Membership Subscription Session (Phase 2)
+        // Branch 2: Membership Subscription Session
         const userId = session.metadata?.user_id;
         const plan = (session.metadata?.plan as 'monthly' | 'yearly') || 'monthly';
         const customerId =
@@ -301,7 +301,7 @@ export async function POST(req: Request) {
           break;
         }
 
-        // Fetch user profile for charity allocation (minimum 10% from PRD)
+        // Fetch user profile for charity allocation (minimum 10% rule)
         const { data: profile } = await supabase
           .from('profiles')
           .select('charity_id, charity_percent')

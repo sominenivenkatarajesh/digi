@@ -1,5 +1,5 @@
 -- Migration 004: Ensure Unique user_id on subscriptions table for idempotent upsert
--- Required for Phase 2 Stripe subscriptions and resubscribe synchronization
+-- Enforces 1-to-1 subscription per user for safe Stripe synchronization
 
 DO $$
 BEGIN

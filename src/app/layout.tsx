@@ -3,6 +3,7 @@ import { Outfit, Inter } from 'next/font/google';
 import './globals.css';
 import { SmoothScrollProvider } from '@/components/providers/SmoothScrollProvider';
 import { CurrencyProvider } from '@/components/providers/CurrencyProvider';
+import { ToastProvider } from '@/components/providers/ToastProvider';
 
 const outfit = Outfit({
   variable: '--font-outfit',
@@ -47,7 +48,9 @@ export default function RootLayout({
     <html lang="en" className={`${outfit.variable} ${inter.variable} dark h-full`}>
       <body className="min-h-full flex flex-col bg-navy-950 text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
         <SmoothScrollProvider>
-          <CurrencyProvider>{children}</CurrencyProvider>
+          <CurrencyProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </CurrencyProvider>
         </SmoothScrollProvider>
       </body>
     </html>

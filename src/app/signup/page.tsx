@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { createClient } from '@/lib/supabase/client';
 import { signupSchema, SignupInput } from '@/lib/validations/auth';
+import { CurrencySelector } from '@/components/ui/CurrencySelector';
+import { useCurrency } from '@/components/providers/CurrencyProvider';
 import {
   Sparkles,
   Heart,
@@ -48,6 +50,7 @@ const fallbackCharities: CharityOption[] = [
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { format: formatPrice } = useCurrency();
   const planParam = searchParams.get('plan') === 'yearly' ? 'yearly' : 'monthly';
   const charityParam = searchParams.get('charity');
 
@@ -180,6 +183,11 @@ function SignupForm() {
 
   return (
     <main className="min-h-screen bg-navy-950 text-white flex flex-col justify-center items-center py-20 px-4 relative overflow-hidden">
+      {/* Top right currency option */}
+      <div className="absolute top-6 right-6 z-20">
+        <CurrencySelector size="sm" />
+      </div>
+
       {/* Background Glows */}
       <div
         className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-gradient-to-br from-emerald-500/15 via-gold-500/10 to-transparent blur-[140px] rounded-full"
@@ -387,7 +395,7 @@ function SignupForm() {
                     }`}
                   >
                     <div className="text-xs font-bold">Monthly</div>
-                    <div className="text-sm font-extrabold text-white mt-0.5">£10 / mo</div>
+                    <div className="text-sm font-extrabold text-white mt-0.5">{formatPrice(10)} / mo</div>
                   </button>
 
                   <button
@@ -405,7 +413,7 @@ function SignupForm() {
                         Best Value
                       </span>
                     </div>
-                    <div className="text-sm font-extrabold text-white mt-0.5">£99 / yr</div>
+                    <div className="text-sm font-extrabold text-white mt-0.5">{formatPrice(99)} / yr</div>
                   </button>
                 </div>
               </div>
