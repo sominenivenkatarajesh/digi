@@ -30,10 +30,10 @@ export function Navbar() {
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        'fixed top-0 left-0 right-0 z-[100] transition-all duration-300',
         isScrolled
-          ? 'bg-navy-950/80 backdrop-blur-xl border-b border-white/[0.08] shadow-lg shadow-black/30 py-3'
-          : 'bg-transparent py-5'
+          ? 'bg-navy-950/95 backdrop-blur-xl border-b border-white/[0.08] shadow-lg shadow-black/40 py-3'
+          : 'bg-navy-950/80 backdrop-blur-md py-5'
       )}
     >
       <Container size="wide" className="flex items-center justify-between">
