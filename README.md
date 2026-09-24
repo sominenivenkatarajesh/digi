@@ -86,7 +86,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## 3. Live Deployment & Evaluator Credentials
 
 ### Live Production Deployment
-- **Production URL**: `https://digi-omega.vercel.app` *(or custom domain assigned)*
+- **Production URL**: `https://digi-sominenivenkatarajeshs-projects.vercel.app`
+- **Preview Deployment URL**: `https://digi-5wwysqmpz-sominenivenkatarajeshs-projects.vercel.app`
 - **Supabase Project**: Production database running PostgreSQL 15 with RLS enabled across all tables.
 
 ### Evaluator Test Credentials
