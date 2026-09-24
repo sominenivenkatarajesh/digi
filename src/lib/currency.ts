@@ -1,9 +1,23 @@
-export type CurrencyCode = 'INR' | 'USD' | 'GBP' | 'EUR' | 'AUD' | 'CAD' | 'AED';
+export type CurrencyCode =
+  | 'INR'
+  | 'USD'
+  | 'GBP'
+  | 'EUR'
+  | 'AUD'
+  | 'CAD'
+  | 'AED'
+  | 'SGD'
+  | 'JPY'
+  | 'NZD'
+  | 'CHF'
+  | 'ZAR';
 
 export interface CurrencyConfig {
   code: CurrencyCode;
   symbol: string;
   name: string;
+  country: string;
+  countryCode: string;
   rateFromGbp: number; // 1 GBP = X in target currency
   flag: string;
 }
@@ -13,6 +27,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'INR',
     symbol: '₹',
     name: 'Indian Rupee',
+    country: 'India',
+    countryCode: 'IN',
     rateFromGbp: 110.0,
     flag: '🇮🇳',
   },
@@ -20,6 +36,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'USD',
     symbol: '$',
     name: 'US Dollar',
+    country: 'United States',
+    countryCode: 'US',
     rateFromGbp: 1.28,
     flag: '🇺🇸',
   },
@@ -27,6 +45,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'GBP',
     symbol: '£',
     name: 'British Pound',
+    country: 'United Kingdom',
+    countryCode: 'GB',
     rateFromGbp: 1.0,
     flag: '🇬🇧',
   },
@@ -34,6 +54,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'EUR',
     symbol: '€',
     name: 'Euro',
+    country: 'European Union',
+    countryCode: 'EU',
     rateFromGbp: 1.17,
     flag: '🇪🇺',
   },
@@ -41,6 +63,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'AUD',
     symbol: 'A$',
     name: 'Australian Dollar',
+    country: 'Australia',
+    countryCode: 'AU',
     rateFromGbp: 1.95,
     flag: '🇦🇺',
   },
@@ -48,6 +72,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'CAD',
     symbol: 'C$',
     name: 'Canadian Dollar',
+    country: 'Canada',
+    countryCode: 'CA',
     rateFromGbp: 1.76,
     flag: '🇨🇦',
   },
@@ -55,8 +81,55 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     code: 'AED',
     symbol: 'AED ',
     name: 'UAE Dirham',
+    country: 'United Arab Emirates',
+    countryCode: 'AE',
     rateFromGbp: 4.7,
     flag: '🇦🇪',
+  },
+  SGD: {
+    code: 'SGD',
+    symbol: 'S$',
+    name: 'Singapore Dollar',
+    country: 'Singapore',
+    countryCode: 'SG',
+    rateFromGbp: 1.72,
+    flag: '🇸🇬',
+  },
+  JPY: {
+    code: 'JPY',
+    symbol: '¥',
+    name: 'Japanese Yen',
+    country: 'Japan',
+    countryCode: 'JP',
+    rateFromGbp: 195.0,
+    flag: '🇯🇵',
+  },
+  NZD: {
+    code: 'NZD',
+    symbol: 'NZ$',
+    name: 'New Zealand Dollar',
+    country: 'New Zealand',
+    countryCode: 'NZ',
+    rateFromGbp: 2.12,
+    flag: '🇳🇿',
+  },
+  CHF: {
+    code: 'CHF',
+    symbol: 'CHF ',
+    name: 'Swiss Franc',
+    country: 'Switzerland',
+    countryCode: 'CH',
+    rateFromGbp: 1.11,
+    flag: '🇨🇭',
+  },
+  ZAR: {
+    code: 'ZAR',
+    symbol: 'R',
+    name: 'South African Rand',
+    country: 'South Africa',
+    countryCode: 'ZA',
+    rateFromGbp: 23.5,
+    flag: '🇿🇦',
   },
 };
 

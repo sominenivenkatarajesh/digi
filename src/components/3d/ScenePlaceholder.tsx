@@ -29,16 +29,18 @@ export function ScenePlaceholder({
       )}
 
       {variant === 'balls' && (
-        <div className="flex gap-4 sm:gap-6 items-center justify-center">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="flex gap-3 sm:gap-5 items-center justify-center py-4">
+          {['07', '14', '21', '28', '35'].map((num, i) => (
             <div
-              key={i}
-              className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border border-gold-400/20 bg-gradient-to-br from-navy-800 to-navy-950 flex items-center justify-center shadow-lg shadow-gold-500/5 animate-pulse"
+              key={num}
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border border-gold-400/30 bg-gradient-to-br from-emerald-900/60 to-navy-950 flex items-center justify-center shadow-lg shadow-emerald-500/10 animate-pulse"
               style={{ animationDelay: `${i * 150}ms` }}
             >
-              <span className="text-xs font-mono font-bold text-gold-400/50">
-                0{i}
-              </span>
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/10 border border-gold-400/40 flex items-center justify-center">
+                <span className="text-xs sm:text-sm font-mono font-bold text-gold-400">
+                  {num}
+                </span>
+              </div>
             </div>
           ))}
         </div>

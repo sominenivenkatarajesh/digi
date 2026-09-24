@@ -15,7 +15,7 @@ export const DynamicDrawBalls = dynamic(
   () => import('./DrawBalls').then((mod) => mod.DrawBalls),
   {
     ssr: false,
-    loading: () => <ScenePlaceholder variant="balls" height="h-[280px] sm:h-[340px]" />,
+    loading: () => <ScenePlaceholder variant="balls" height="h-[180px] sm:h-[210px]" />,
   }
 );
 
